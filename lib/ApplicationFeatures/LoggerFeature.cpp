@@ -32,6 +32,8 @@ LoggerFeature::LoggerFeature(application_features::ApplicationServer* server)
     : ApplicationFeature(server, "LoggerFeature"),
       _output(),
       _level("info"),
+      _prefix(""),
+      _file(),
       _useLocalTime(false),
       _lineNumber(false),
       _thread(false) {
@@ -55,6 +57,14 @@ void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
 
   options->addSection(Section("log-hidden", "Configure the logging",
                               "hidden logging options", true, false));
+
+  options->addOption("--log.prefix",
+                     "adds a prefix in case multiple instances are running",
+                     new StringParameter(&_prefix));
+
+  options->addOption("--log.file",
+                     "shortcut for '--log.output file://<filename>'",
+                     new VectorParameter<StringParameter>(&_file));
 
   options->addOption("--log.line-number", "append line number and file name",
                      new BooleanParameter(&_lineNumber));

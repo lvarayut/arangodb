@@ -20,27 +20,26 @@
 /// @author Dr. Frank Celler
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_LOGGER_FEATURE_H
-#define APPLICATION_FEATURES_LOGGER_FEATURE_H 1
+#ifndef APPLICATION_FEATURES_DATABASE_FEATURE_H
+#define APPLICATION_FEATURES_DATABASE_FEATURE_H 1
 
 #include "ApplicationFeatures/ApplicationFeature.h"
 
 namespace arangodb {
-class LoggerFeature final : public application_features::ApplicationFeature {
+class DatabaseFeature final : public application_features::ApplicationFeature {
  public:
-  explicit LoggerFeature(application_features::ApplicationServer* server);
+  explicit DatabaseFeature(application_features::ApplicationServer* server,
+                           uint64_t maximalJournalSize);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
 
  private:
-  std::vector<std::string> _output;
-  std::string _level;
-  bool _useLocalTime;
-  std::string _prefix;
-  std::vector<std::string> _file;
-  bool _lineNumber;
-  bool _thread;
+  std::string _directory;
+  uint64_t _maximalJournalSize;
+  bool _queryTracking;
+  std::string _queryCacheMode;
+  uint64_t _queryCacheEntries;
 };
 }
 
