@@ -20,26 +20,26 @@
 /// @author Dr. Frank Celler
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_SSL_FEATURE_H
-#define APPLICATION_FEATURES_SSL_FEATURE_H 1
+#ifndef APPLICATION_FEATURES_CONFIG_FEATURE_H
+#define APPLICATION_FEATURES_CONFIG_FEATURE_H 1
 
 #include "ApplicationFeatures/ApplicationFeature.h"
 
 namespace arangodb {
-class SslFeature final : public application_features::ApplicationFeature {
+class ConfigFeature final : public application_features::ApplicationFeature {
  public:
-  explicit SslFeature(application_features::ApplicationServer* server);
+  explicit ConfigFeature(application_features::ApplicationServer* server,
+                         std::string const& progname);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
+  void loadOptions(std::shared_ptr<options::ProgramOptions>) override;
 
  public:
-  std::string _cafile;
-  std::string _keyfile;
-  bool _sessionCache;
-  std::string _chiperList;
-  uint64_t _protocol;
-  uint64_t _options;
+  std::string _file;
+
+ private:
+  std::string _progname;
 };
 }
 

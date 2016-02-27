@@ -126,11 +126,6 @@ static bool Progress = true;
 ////////////////////////////////////////////////////////////////////////////////
 
 static void ParseProgramOptions(int argc, char* argv[]) {
-  ProgramOptionsDescription deprecatedOptions("DEPRECATED options");
-
-  deprecatedOptions("max-upload-size", &ChunkSize,
-                    "size for individual data batches (in bytes)");
-
   ProgramOptionsDescription description("STANDARD options");
 
   description("file", &FileName, "file name (\"-\" for STDIN)")(

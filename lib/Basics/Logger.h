@@ -273,6 +273,7 @@ class Logger {
 
   static LogTopic COLLECTOR;
   static LogTopic COMPACTOR;
+  static LogTopic CONFIG;
   static LogTopic MMAP;
   static LogTopic PERFORMANCE;
   static LogTopic QUERIES;

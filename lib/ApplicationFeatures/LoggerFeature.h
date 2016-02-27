@@ -32,10 +32,12 @@ class LoggerFeature final : public application_features::ApplicationFeature {
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
+  void loadOptions(std::shared_ptr<options::ProgramOptions>) override;
+  void prepare() override;
 
- private:
+ public:
   std::vector<std::string> _output;
-  std::string _level;
+  std::vector<std::string> _level;
   bool _useLocalTime;
   std::string _prefix;
   std::vector<std::string> _file;

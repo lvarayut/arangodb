@@ -591,6 +591,19 @@ std::string homeDirectory() {
 
   return result;
 }
+
+std::string configDirectory() {
+  char* dir = TRI_LocateConfigDirectory();
+
+  if (dir == nullptr) {
+    return currentDirectory();
+  }
+      
+  std::string result = dir;
+  TRI_FreeString(TRI_CORE_MEM_ZONE, dir);
+
+  return result;
+}
 }
 }
 }

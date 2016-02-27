@@ -89,14 +89,6 @@ V8ClientConnection* ClientConnection = nullptr;
 std::unordered_map<void*, v8::Persistent<v8::External>> Connections;
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief Windows console codepage
-////////////////////////////////////////////////////////////////////////////////
-
-#ifdef _WIN32
-static int CodePage = -1;
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
 /// @brief object template for the initial connection
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -173,12 +165,6 @@ static std::vector<std::string> JsLint;
 ////////////////////////////////////////////////////////////////////////////////
 
 static uint64_t GcInterval = 10;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief voice mode
-////////////////////////////////////////////////////////////////////////////////
-
-static bool VoiceMode = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief outputs the arguments
@@ -480,17 +466,8 @@ static std::vector<std::string> ParseProgramOptions(int argc, char* args[],
       "javascript.v8-options", &V8Options, "options to pass to v8")(
       "jslint", &JsLint, "do not start as shell, run jslint instead");
 
-#ifdef _WIN32
-  description("code-page", &CodePage, "windows codepage");
-#endif
-
-#ifdef __APPLE__
-  description("voice", "enable voice based welcome");
-#endif
-
   description("chunk-size", &ChunkSize,
-              "maximum size for individual data batches (in bytes)")(
-      "prompt", &Prompt, "command prompt")(javascript, false);
+              "maximum size for individual data batches (in bytes)")(javascript, false);
 
   std::vector<std::string> arguments;
   *runMode = eInteractive;
@@ -498,6 +475,8 @@ static std::vector<std::string> ParseProgramOptions(int argc, char* args[],
   description.arguments(&arguments);
 
   // fill in used options
+#warning TODO
+#if 0
   BaseClient.setupGeneral(description);
   BaseClient.setupColors(description);
   BaseClient.setupAutoComplete(description);
@@ -505,6 +484,7 @@ static std::vector<std::string> ParseProgramOptions(int argc, char* args[],
   BaseClient.setupPager(description);
   BaseClient.setupLog(description);
   BaseClient.setupServer(description);
+#endif
 
   // and parse the command line and config file
   ProgramOptions options;
@@ -532,11 +512,6 @@ static std::vector<std::string> ParseProgramOptions(int argc, char* args[],
   if (!ExecuteScripts.empty() || !ExecuteString.empty() ||
       !CheckScripts.empty() || !UnitTests.empty() || !JsLint.empty()) {
     BaseClient.shutup();
-  }
-
-  // voice mode
-  if (options.has("voice")) {
-    VoiceMode = true;
   }
 
   if (!ExecuteScripts.empty()) {
@@ -1579,12 +1554,6 @@ static int RunShell(v8::Isolate* isolate, v8::Handle<v8::Context> context,
 
   uint64_t nrCommands = 0;
 
-#ifdef __APPLE__
-  if (VoiceMode) {
-    system("say -v zarvox 'welcome to Arango shell' &");
-  }
-#endif
-
   while (true) {
     // set up prompts
     std::string dynamicPrompt = BuildPrompt();
@@ -1624,12 +1593,6 @@ static int RunShell(v8::Isolate* isolate, v8::Handle<v8::Context> context,
 
       TRI_RunGarbageCollectionV8(isolate, 500.0);
     }
-
-#ifdef __APPLE__
-    if (VoiceMode && promptError) {
-      system("say -v 'whisper' 'oh, no' &");
-    }
-#endif
 
     bool eof;
     std::string input = console.prompt(
@@ -1708,12 +1671,6 @@ static int RunShell(v8::Isolate* isolate, v8::Handle<v8::Context> context,
     // make sure the last command result makes it into the log file
     BaseClient.flushLog();
   }
-
-#ifdef __APPLE__
-  if (VoiceMode) {
-    system("say -v zarvox 'Good-Bye' &");
-  }
-#endif
 
   BaseClient.printLine("");
 

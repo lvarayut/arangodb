@@ -22,6 +22,7 @@
 
 #include "ApplicationFeatures/LoggerFeature.h"
 
+#include "Basics/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
 
@@ -31,12 +32,13 @@ using namespace arangodb::options;
 LoggerFeature::LoggerFeature(application_features::ApplicationServer* server)
     : ApplicationFeature(server, "LoggerFeature"),
       _output(),
-      _level("info"),
+      _level(),
       _prefix(""),
       _file(),
       _useLocalTime(false),
       _lineNumber(false),
       _thread(false) {
+  _level.push_back("info");
   setOptional(false);
   requiresElevatedPrivileges(false);
 }
@@ -49,7 +51,7 @@ void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
                      new VectorParameter<StringParameter>(&_output));
 
   options->addOption("--log.level,-l", "the global or topic-specific log level",
-                     new StringParameter(&_level));
+                     new VectorParameter<StringParameter>(&_level));
 
   options->addOption("--log.use-local-time",
                      "use local timezone instead of UTC",
@@ -71,4 +73,22 @@ void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
 
   options->addOption("--log.thread", "append a thread identifier",
                      new BooleanParameter(&_thread));
+}
+
+void LoggerFeature::loadOptions(std::shared_ptr<options::ProgramOptions>) {
+  // for debugging purpose, we set the log levels NOW
+  // this might be overwritten latter
+  Logger::initialize(false);
+  Logger::setLogLevel(_level);
+}
+
+void LoggerFeature::prepare() {
+  Logger::flush();
+  Logger::shutdown(true);
+  Logger::initialize(false);
+
+  Logger::setLogLevel(_level);
+  Logger::setUseLocalTime(_useLocalTime);
+  Logger::setShowLineNumber(_lineNumber);
+  Logger::setShowThreadIdentifier(_thread);
 }

@@ -783,6 +783,7 @@ LoggerStream::~LoggerStream() {
 
 LogTopic Logger::COLLECTOR("collector");
 LogTopic Logger::COMPACTOR("compactor");
+LogTopic Logger::CONFIG("config");
 LogTopic Logger::DATAFILES("datafiles", LogLevel::INFO);
 LogTopic Logger::MMAP("mmap");
 LogTopic Logger::PERFORMANCE("performance",

@@ -20,26 +20,35 @@
 /// @author Dr. Frank Celler
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_SSL_FEATURE_H
-#define APPLICATION_FEATURES_SSL_FEATURE_H 1
+#ifndef APPLICATION_FEATURES_CONSOLE_FEATURE_H
+#define APPLICATION_FEATURES_CONSOLE_FEATURE_H 1
 
 #include "ApplicationFeatures/ApplicationFeature.h"
 
 namespace arangodb {
-class SslFeature final : public application_features::ApplicationFeature {
+class ConsoleFeature final : public application_features::ApplicationFeature {
  public:
-  explicit SslFeature(application_features::ApplicationServer* server);
+  explicit ConsoleFeature(application_features::ApplicationServer* server);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
 
  public:
-  std::string _cafile;
-  std::string _keyfile;
-  bool _sessionCache;
-  std::string _chiperList;
-  uint64_t _protocol;
-  uint64_t _options;
+#ifdef WIN32
+  int16_t _codePage;
+#endif
+  bool _quiet;
+  bool _colors;
+  bool _autoComplete;
+  bool _prettyPrint;
+  std::string _auditFile;
+  bool _pager;
+  std::string _pagerCommand;
+  std::string _prompt;
+
+ private:
+  FILE* _toPager;
+  FILE* _toAuditFile;
 };
 }
 

@@ -23,6 +23,7 @@
 #include "ApplicationServer.h"
 
 #include "ApplicationFeatures/ApplicationFeature.h"
+#include "ProgramOptions2/ArgumentParser.h"
 #include "Basics/Logger.h"
 
 using namespace arangodb::application_features;
@@ -83,14 +84,19 @@ bool ApplicationServer::isRequired(std::string const& name) const {
 // this method will initialize and validate options
 // of all feature, start them and wait for a shutdown
 // signal. after that, it will shutdown all features
-void ApplicationServer::run() {
+void ApplicationServer::run(int argc, char* argv[]) {
   LOG(TRACE) << "ApplicationServer::run";
 
   // collect options from all features
   // in this phase, all features are order-independent
   collectOptions();
 
-  // TODO: parse command-line options here
+  // setup dependency, but ignore any failure for now
+  setupDependencies(false);
+
+  // parse the command line parameters and load any configuration
+  // file(s)
+  parseOptions(argc, argv);
 
   // validate options of all features
   // in this phase, all features are stil order-independent
@@ -100,7 +106,7 @@ void ApplicationServer::run() {
   enableAutomaticFeatures();
 
   // setup and validate all feature dependencies
-  setupDependencies();
+  setupDependencies(true);
 
   // now the features will actually do some preparation work
   // in the preparation phase, the features must not start any threads
@@ -166,6 +172,30 @@ void ApplicationServer::collectOptions() {
   }, true);
 }
 
+void ApplicationServer::parseOptions(int argc, char* argv[]) {
+  ArgumentParser parser(_options.get());
+
+  std::string helpSection = parser.helpSection(argc, argv);
+
+  if (!helpSection.empty()) {
+    // user asked for "--help"
+    _options->printHelp(helpSection);
+    exit(EXIT_SUCCESS);
+  }
+
+  if (!parser.parse(argc, argv)) {
+    // command-line option parsing failed. an error was already printed
+    // by now, so we can exit
+    exit(EXIT_FAILURE);
+  }
+
+  for (auto it = _orderedFeatures.begin(); it != _orderedFeatures.end(); ++it) {
+    if ((*it)->isEnabled()) {
+      (*it)->loadOptions(_options);
+    }
+  }
+}
+
 void ApplicationServer::validateOptions() {
   LOG(TRACE) << "ApplicationServer::vaiidateOptions";
 
@@ -197,22 +227,24 @@ void ApplicationServer::enableAutomaticFeatures() {
 }
 
 // setup and validate all feature dependencies, determine feature order
-void ApplicationServer::setupDependencies() {
+void ApplicationServer::setupDependencies(bool failOnMissing) {
   LOG(TRACE) << "ApplicationServer::vaiidateDependencies";
 
   // first check if a feature references an unknown other feature
-  apply([this](ApplicationFeature* feature) {
-    for (auto& other : feature->requires()) {
-      if (!this->exists(other)) {
-        fail("feature '" + feature->name() + "' depends on unknown feature '" +
-             other + "'");
-      }
-      if (!this->feature(other)->isEnabled()) {
-        fail("enabled feature '" + feature->name() +
-             "' depends on other feature '" + other + "', which is disabled");
-      }
-    }
-  }, true);
+  if (failOnMissing) {
+    apply([this](ApplicationFeature* feature) {
+        for (auto& other : feature->requires()) {
+          if (!this->exists(other)) {
+            fail("feature '" + feature->name() + "' depends on unknown feature '" +
+                 other + "'");
+          }
+          if (!this->feature(other)->isEnabled()) {
+            fail("enabled feature '" + feature->name() +
+                 "' depends on other feature '" + other + "', which is disabled");
+          }
+        }
+      }, true);
+  }
 
   // first insert all features, even the inactive ones
   std::vector<ApplicationFeature*> features;

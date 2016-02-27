@@ -23,7 +23,7 @@ endif ()
 add_executable(${BIN_ARANGOB}
   ${ProductVersionFiles_arangob}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
-  ArangoShell/ArangoClient.cpp
+  Benchmark/ArangobFeature.cpp
   Benchmark/arangob.cpp
 )
 

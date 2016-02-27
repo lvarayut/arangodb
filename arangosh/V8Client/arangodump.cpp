@@ -661,7 +661,7 @@ static int RunDump(std::string& errorMsg) {
   try {
     VPackBuilder meta;
     meta.openObject();
-    meta.add("database", VPackValue(BaseClient.databaseName()));
+    meta.add("database", VPackValue(client->databaseName()));
     meta.add("lastTickAtDumpStart", VPackValue(tickString));
 
     // save last tick in file

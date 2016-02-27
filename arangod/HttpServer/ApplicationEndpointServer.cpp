@@ -64,6 +64,7 @@ ApplicationEndpointServer::ApplicationEndpointServer(
     std::string const& authenticationRealm,
     HttpHandlerFactory::context_fptr setContext, void* contextData)
     : ApplicationFeature("EndpointServer"),
+      _sslFeature(nullptr),
       _applicationServer(applicationServer),
       _applicationScheduler(applicationScheduler),
       _applicationDispatcher(applicationDispatcher),
@@ -83,12 +84,6 @@ ApplicationEndpointServer::ApplicationEndpointServer(
       _allowMethodOverride(false),
       _backlogSize(64),
       _httpsKeyfile(),
-      _cafile(),
-      _sslProtocol(TLS_V1),
-      _sslCache(false),
-      _sslOptions(
-          (long)(SSL_OP_TLS_ROLLBACK_BUG | SSL_OP_CIPHER_SERVER_PREFERENCE)),
-      _sslCipherList(""),
       _sslContext(nullptr),
       _rctx() {
   // if our default value is too high, we'll use half of the max value provided
@@ -144,7 +139,8 @@ bool ApplicationEndpointServer::buildServers() {
     // check the ssl context
     if (_sslContext == nullptr) {
       LOG(INFO) << "please use the --server.keyfile option";
-      LOG(FATAL) << "no ssl context is known, cannot create https server"; FATAL_ERROR_EXIT();
+      LOG(FATAL) << "no ssl context is known, cannot create https server";
+      FATAL_ERROR_EXIT();
     }
 
     // https
@@ -180,18 +176,6 @@ void ApplicationEndpointServer::setupOptions(
                                            &_keepAliveTimeout,
                                            "keep-alive timeout in seconds")(
       "server.reuse-address", &_reuseAddress, "try to reuse address");
-
-  options["SSL Options:help-ssl"]("server.keyfile", &_httpsKeyfile,
-                                  "keyfile for SSL connections")(
-      "server.cafile", &_cafile,
-      "file containing the CA certificates of clients")(
-      "server.ssl-protocol", &_sslProtocol,
-      "1 = SSLv2, 2 = SSLv23, 3 = SSLv3, 4 = TLSv1")(
-      "server.ssl-cache", &_sslCache, "use SSL session caching")(
-      "server.ssl-options", &_sslOptions,
-      "SSL options, see OpenSSL documentation")(
-      "server.ssl-cipher-list", &_sslCipherList,
-      "SSL cipher list, see OpenSSL documentation");
 }
 
 bool ApplicationEndpointServer::afterOptionParsing(ProgramOptions& options) {
@@ -203,11 +187,15 @@ bool ApplicationEndpointServer::afterOptionParsing(ProgramOptions& options) {
   }
 
   if (_backlogSize <= 0) {
-    LOG(FATAL) << "invalid value for --server.backlog-size. expecting a positive value"; FATAL_ERROR_EXIT();
+    LOG(FATAL) << "invalid value for --server.backlog-size. expecting a "
+                  "positive value";
+    FATAL_ERROR_EXIT();
   }
 
   if (_backlogSize > SOMAXCONN) {
-    LOG(WARN) << "value for --server.backlog-size exceeds default system header SOMAXCONN value " << SOMAXCONN << ". trying to use " << SOMAXCONN << " anyway";
+    LOG(WARN) << "value for --server.backlog-size exceeds default system "
+                 "header SOMAXCONN value "
+              << SOMAXCONN << ". trying to use " << SOMAXCONN << " anyway";
   }
 
   if (!_httpPort.empty()) {
@@ -224,12 +212,16 @@ bool ApplicationEndpointServer::afterOptionParsing(ProgramOptions& options) {
                                 _reuseAddress);
 
     if (!ok) {
-      LOG(FATAL) << "invalid endpoint '" << (*i) << "'"; FATAL_ERROR_EXIT();
+      LOG(FATAL) << "invalid endpoint '" << (*i) << "'";
+      FATAL_ERROR_EXIT();
     }
   }
 
   if (_defaultApiCompatibility < HttpRequest::MinCompatibility) {
-    LOG(FATAL) << "invalid value for --server.default-api-compatibility. minimum allowed value is " << HttpRequest::MinCompatibility; FATAL_ERROR_EXIT();
+    LOG(FATAL) << "invalid value for --server.default-api-compatibility. "
+                  "minimum allowed value is "
+               << HttpRequest::MinCompatibility;
+    FATAL_ERROR_EXIT();
   }
 
   // and return
@@ -331,7 +323,8 @@ bool ApplicationEndpointServer::prepare() {
 
   if (_endpointList.empty()) {
     LOG(INFO) << "please use the '--server.endpoint' option";
-    LOG(FATAL) << "no endpoints have been specified, giving up"; FATAL_ERROR_EXIT();
+    LOG(FATAL) << "no endpoints have been specified, giving up";
+    FATAL_ERROR_EXIT();
   }
 
   // dump all endpoints for user information
@@ -341,7 +334,8 @@ bool ApplicationEndpointServer::prepare() {
       new HttpHandlerFactory(_authenticationRealm, _defaultApiCompatibility,
                              _allowMethodOverride, _setContext, _contextData);
 
-  LOG(DEBUG) << "using default API compatibility: " << (long int)_defaultApiCompatibility;
+  LOG(DEBUG) << "using default API compatibility: "
+             << (long int)_defaultApiCompatibility;
 
   return true;
 }
@@ -390,19 +384,23 @@ bool ApplicationEndpointServer::createSslContext() {
   }
 
   // validate protocol
-  if (_sslProtocol <= SSL_UNKNOWN || _sslProtocol >= SSL_LAST) {
-    LOG(ERR) << "invalid SSL protocol version specified. Please use a valid value for --server.ssl-protocol.";
+  if (_sslFeature._protocol <= SSL_UNKNOWN ||
+      _sslFeature._protocol >= SSL_LAST) {
+    LOG(ERR) << "invalid SSL protocol version specified. Please use a valid "
+                "value for --server.ssl-protocol.";
     return false;
   }
 
-  LOG(DEBUG) << "using SSL protocol version '" << protocolName((protocol_e)_sslProtocol) << "'";
+  LOG(DEBUG) << "using SSL protocol version '"
+             << protocolName((protocol_e)_sslFeature._protocol) << "'";
 
   if (!FileUtils::exists(_httpsKeyfile)) {
-    LOG(FATAL) << "unable to find SSL keyfile '" << _httpsKeyfile << "'"; FATAL_ERROR_EXIT();
+    LOG(FATAL) << "unable to find SSL keyfile '" << _httpsKeyfile << "'";
+    FATAL_ERROR_EXIT();
   }
 
   // create context
-  _sslContext = sslContext(protocol_e(_sslProtocol), _httpsKeyfile);
+  _sslContext = sslContext(protocol_e(_sslFeature._protocol), _httpsKeyfile);
 
   if (_sslContext == nullptr) {
     LOG(ERR) << "failed to create SSL context, cannot create HTTPS server";
@@ -410,24 +408,28 @@ bool ApplicationEndpointServer::createSslContext() {
   }
 
   // set cache mode
-  SSL_CTX_set_session_cache_mode(
-      _sslContext, _sslCache ? SSL_SESS_CACHE_SERVER : SSL_SESS_CACHE_OFF);
+  SSL_CTX_set_session_cache_mode(_sslContext, _sslFeature._sessionCache
+                                                  ? SSL_SESS_CACHE_SERVER
+                                                  : SSL_SESS_CACHE_OFF);
 
-  if (_sslCache) {
+  if (_sslFeature._sessionCache) {
     LOG(TRACE) << "using SSL session caching";
   }
 
   // set options
-  SSL_CTX_set_options(_sslContext, (long)_sslOptions);
+  SSL_CTX_set_options(_sslContext, (long)_sslFeature._options);
 
-  LOG(INFO) << "using SSL options: " << _sslOptions;
+  LOG(INFO) << "using SSL options: " << _sslFeature._options;
 
-  if (!_sslCipherList.empty()) {
-    if (SSL_CTX_set_cipher_list(_sslContext, _sslCipherList.c_str()) != 1) {
+  if (!_sslFeature._chiperList.empty()) {
+    if (SSL_CTX_set_cipher_list(_sslContext, _sslFeature._chiperList.c_str()) !=
+        1) {
       LOG(ERR) << "SSL error: " << lastSSLError();
-      LOG(FATAL) << "cannot set SSL cipher list '" << _sslCipherList << "'"; FATAL_ERROR_EXIT();
+      LOG(FATAL) << "cannot set SSL cipher list '" << _sslFeature._chiperList
+                 << "'";
+      FATAL_ERROR_EXIT();
     } else {
-      LOG(INFO) << "using SSL cipher-list '" << _sslCipherList << "'";
+      LOG(INFO) << "using SSL cipher-list '" << _sslFeature._chiperList << "'";
     }
   }
 
@@ -441,27 +443,30 @@ bool ApplicationEndpointServer::createSslContext() {
 
   if (res != 1) {
     LOG(ERR) << "SSL error: " << lastSSLError();
-    LOG(FATAL) << "cannot set SSL session id context '" << _rctx << "'"; FATAL_ERROR_EXIT();
+    LOG(FATAL) << "cannot set SSL session id context '" << _rctx << "'";
+    FATAL_ERROR_EXIT();
   }
 
   // check CA
-  if (!_cafile.empty()) {
-    LOG(TRACE) << "trying to load CA certificates from '" << _cafile << "'";
+  if (!_sslFeature._cafile.empty()) {
+    LOG(TRACE) << "trying to load CA certificates from '" << _sslFeature._cafile << "'";
 
-    int res = SSL_CTX_load_verify_locations(_sslContext, _cafile.c_str(), 0);
+    int res = SSL_CTX_load_verify_locations(_sslContext, _sslFeature._cafile.c_str(), 0);
 
     if (res == 0) {
       LOG(ERR) << "SSL error: " << lastSSLError();
-      LOG(FATAL) << "cannot load CA certificates from '" << _cafile << "'"; FATAL_ERROR_EXIT();
+      LOG(FATAL) << "cannot load CA certificates from '" << _sslFeature._cafile << "'";
+      FATAL_ERROR_EXIT();
     }
 
     STACK_OF(X509_NAME) * certNames;
 
-    certNames = SSL_load_client_CA_file(_cafile.c_str());
+    certNames = SSL_load_client_CA_file(_sslFeature._cafile.c_str());
 
     if (certNames == nullptr) {
       LOG(ERR) << "ssl error: " << lastSSLError();
-      LOG(FATAL) << "cannot load CA certificates from '" << _cafile << "'"; FATAL_ERROR_EXIT();
+      LOG(FATAL) << "cannot load CA certificates from '" << _sslFeature._cafile << "'";
+      FATAL_ERROR_EXIT();
     }
 
     if (Logger::logLevel() == arangodb::LogLevel::TRACE) {

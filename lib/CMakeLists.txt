@@ -133,9 +133,13 @@ add_library(${LIB_ARANGO} STATIC
   ${LIB_ARANGO_VPACK}
   ApplicationFeatures/ApplicationFeature.cpp
   ApplicationFeatures/ApplicationServer.cpp
+  ApplicationFeatures/ClientFeature.cpp
+  ApplicationFeatures/ConfigFeature.cpp
+  ApplicationFeatures/ConsoleFeature.cpp
   ApplicationFeatures/DatabaseFeature.cpp
   ApplicationFeatures/LoggerFeature.cpp
   ApplicationFeatures/SslFeature.cpp
+  ApplicationFeatures/TempFeature.cpp
   Basics/AttributeNameParser.cpp
   Basics/Barrier.cpp
   Basics/ConditionLocker.cpp
