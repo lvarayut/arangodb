@@ -147,6 +147,12 @@
           label: "Submit",
           letter: "Ctrl + Return"
         },{
+          label: "Explain Query",
+          letter: "Ctrl + Shift + E"
+        },{
+          label: "Save Query",
+          letter: "Ctrl + Shift + S"
+        },{
           label: "Toggle comments",
           letter: "Ctrl + Shift + C"
         },{
@@ -249,6 +255,11 @@
 
     arangoError: function (title, content, info) {
       window.App.notificationList.add({title:title, content: content, info: info, type: 'error'});
+    },
+
+    hideArangoNotifications: function() {
+      $.noty.clearQueue();
+      $.noty.closeAll();
     },
 
     openDocEditor: function (id, type, callback) {
