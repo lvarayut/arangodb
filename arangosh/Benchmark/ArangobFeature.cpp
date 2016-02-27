@@ -85,7 +85,7 @@ void ArangobFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
   options->addOption("--requests", "total number of operations",
                      new UInt64Parameter(&_operations));
 
-  options->addOption("--batch-site",
+  options->addOption("--batch-size",
                      "number of operations in one batch (0 disables batching)",
                      new UInt64Parameter(&_batchSize));
 
@@ -95,13 +95,31 @@ void ArangobFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
   options->addOption("--collection", "collection name to use in tests",
                      new StringParameter(&_collection));
 
+  std::unordered_set<std::string> cases = {"version",
+                                           "document",
+                                           "collection",
+                                           "import-document",
+                                           "hash",
+                                           "skiplist",
+                                           "edge",
+                                           "shapes",
+                                           "shapes-append",
+                                           "random-shapes",
+                                           "crud",
+                                           "crud-append",
+                                           "crud-write-read",
+                                           "aqltrx",
+                                           "counttrx",
+                                           "multitrx",
+                                           "multi-collection",
+                                           "aqlinsert",
+                                           "aqlv8"};
+  std::vector<std::string> casesVector(cases.begin(), cases.end());
+  std::string casesJoined = StringUtils::join(casesVector, ", ");
+
   options->addOption(
-      "--test-case",
-      "test case to use (possible values: version, document, collection, "
-      "import-document, hash, skiplist, edge, shapes, shapes-append, "
-      "random-shapes, crud, crud-append, crud-write-read, aqltrx, counttrx, "
-      "multitrx, multi-collection, aqlinsert, aqlv8)",
-      new StringParameter(&_testCase));
+      "--test-case", "test case to use (possible values: " + casesJoined + ")",
+      new DiscreteValuesParameter<StringParameter>(&_testCase, cases));
 
   options->addOption("--complexity", "complexity parameter for the test",
                      new UInt64Parameter(&_complexity));

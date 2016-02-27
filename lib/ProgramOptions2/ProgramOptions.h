@@ -25,13 +25,13 @@
 
 #include "Basics/Common.h"
 
-#include "ProgramOptions2/Option.h"
-#include "ProgramOptions2/Section.h"
-
 #include <velocypack/Builder.h>
 #include <velocypack/velocypack-aliases.h>
 
-#include <functional>
+#include "Basics/levenshtein.h"
+#include "Basics/terminal-utils.h"
+#include "ProgramOptions2/Option.h"
+#include "ProgramOptions2/Section.h"
 
 #define ARANGODB_PROGRAM_OPTIONS_PROGNAME "#progname#"
 
@@ -74,6 +74,7 @@ class ProgramOptions {
 
   // function type for determining terminal width
   typedef std::function<size_t()> TerminalWidthFuncType;
+
   // function type for determining the similarity between two strings
   typedef std::function<int(std::string const&, std::string const&)>
       SimilarityFuncType;
@@ -84,8 +85,8 @@ class ProgramOptions {
 
   ProgramOptions(char const* progname, std::string const& usage,
                  std::string const& more,
-                 TerminalWidthFuncType const& terminalWidth,
-                 SimilarityFuncType const& similarity)
+                 TerminalWidthFuncType const& terminalWidth = TRI_ColumnsWidth,
+                 SimilarityFuncType const& similarity = TRI_Levenshtein)
       : _progname(progname),
         _usage(usage),
         _more(more),

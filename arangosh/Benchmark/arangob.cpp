@@ -25,27 +25,18 @@
 
 #include <iostream>
 
-#include "ArangoShell/ArangoClient.h"
-#include "Logger/Logger.h"
-#include "Basics/Mutex.h"
-#include "Basics/StringBuffer.h"
-#include "Basics/StringUtils.h"
-#include "Basics/levenshtein.h"
-#include "Basics/random.h"
-#include "Basics/terminal-utils.h"
-#include "Basics/tri-strings.h"
+#include "ApplicationFeatures/ClientFeature.h"
+#include "ApplicationFeatures/ConfigFeature.h"
+#include "ApplicationFeatures/LoggerFeature.h"
 #include "Benchmark/ArangobFeature.h"
-#include "ProgramOptions2/ArgumentParser.h"
+#include "Logger/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/Endpoint.h"
 #include "Rest/InitializeRest.h"
-#include "SimpleHttpClient/SimpleHttpClient.h"
-#include "SimpleHttpClient/SimpleHttpResult.h"
 
 using namespace arangodb;
 using namespace arangodb::application_features;
 using namespace arangodb::basics;
-using namespace arangodb::httpclient;
 using namespace arangodb::rest;
 
 ////////////////////////////////////////////////////////////////////////////////
