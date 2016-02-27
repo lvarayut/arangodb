@@ -150,7 +150,7 @@ class ApplicationFeature {
 
   // abort program execution because of invalid parameters
   // TODO: add default implementation
-  void abortInvalidParameters();
+  void abortInvalidParameters() {std::abort();}
 
  private:
   // pointer to application server

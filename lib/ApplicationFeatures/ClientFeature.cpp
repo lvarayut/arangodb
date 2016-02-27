@@ -22,6 +22,8 @@
 
 #include "ApplicationFeatures/ClientFeature.h"
 
+#include "ApplicationFeatures/ConsoleFeature.h"
+#include "Logger/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
 #include "Rest/Endpoint.h"
@@ -40,57 +42,92 @@ ClientFeature::ClientFeature(application_features::ApplicationServer* server,
       _password(""),
       _connectionTimeout(connectionTimeout),
       _requestTimeout(requestTimeout),
-      _sslProtocol(4) {
+      _sslProtocol(4),
+      _section("server"),
+      _endpointServer(nullptr) {
   setOptional(false);
   requiresElevatedPrivileges(false);
 }
 
 void ClientFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
-  static std::string section = "server";
+  options->addSection(Section(_section, "Configure a connection to the server",
+                              _section + " options", false, false));
 
-  options->addSection(Section(section, "Configure a connection to the server",
-                              section + " options", false, false));
-
-  options->addOption("--" + section + ".database",
+  options->addOption("--" + _section + ".database",
                      "database name to use when connecting",
                      new StringParameter(&_databaseName));
 
-  options->addOption("--" + section + ".authentication",
+  options->addOption("--" + _section + ".authentication",
                      "require authentication when connecting",
                      new BooleanParameter(&_authentication));
 
-  options->addOption("--" + section + ".username",
+  options->addOption("--" + _section + ".username",
                      "username to use when connecting",
                      new StringParameter(&_username));
 
   options->addOption(
-      "--" + section + ".endpoint",
+      "--" + _section + ".endpoint",
       "endpoint to connect to, use 'none' to start without a server",
       new StringParameter(&_endpoint));
 
-  options->addOption("--" + section + ".password",
+  options->addOption("--" + _section + ".password",
                      "password to use when connection. If not specified and "
                      "authentication is required, the user will be prompted "
                      "for a password.",
                      new StringParameter(&_password));
 
-  options->addOption("--" + section + ".connection-timeout",
+  options->addOption("--" + _section + ".connection-timeout",
                      "connection timeout in seconds",
                      new DoubleParameter(&_connectionTimeout));
 
-  options->addOption("--" + section + ".request-timeout",
+  options->addOption("--" + _section + ".request-timeout",
                      "request timeout in seconds",
                      new DoubleParameter(&_requestTimeout));
 
   std::unordered_set<uint64_t> sslProtocols = {1, 2, 3, 4};
 
-  options->addOption("--" + section + ".ssl-protocol",
+  options->addOption("--" + _section + ".ssl-protocol",
                      "1 = SSLv2, 2 = SSLv23, 3 = SSLv3, 4 = TLSv1",
                      new DiscreteValuesParameter<UInt64Parameter>(
                          &_sslProtocol, sslProtocols));
 }
 
-void ClientFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {}
+void ClientFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {
+  // if a username is specified explicitly, assume authentication is desired
+  if (options->processingResult().touched(_section + ".username")) {
+    _authentication = true;
+  }
+
+  // check timeouts
+  if (_connectionTimeout < 0.0) {
+    LOG(ERR) << "invalid value for --" << _section
+             << ".connect-timeout, must be >= 0";
+    abortInvalidParameters();
+  } else if (_connectionTimeout == 0.0) {
+    _connectionTimeout = LONG_TIMEOUT;
+  }
+
+  if (_requestTimeout < 0.0) {
+    LOG(ERR) << "invalid value for --" << _section
+             << ".request-timeout, must be positive";
+    abortInvalidParameters();
+  } else if (_requestTimeout == 0.0) {
+    _requestTimeout = LONG_TIMEOUT;
+  }
+
+  // username must be non-empty
+  if (_username.empty()) {
+    LOG(ERR) << "no value specified for --" << _section << ".username";
+    abortInvalidParameters();
+  }
+
+  // ask for a password
+  if (_authentication &&
+      !options->processingResult().touched(_section + ".password")) {
+    usleep(10 * 1000);
+    _password = ConsoleFeature::readPassword("Please specify a password: ");
+  }
+}
 
 void ClientFeature::createEndpointServer() { createEndpointServer(_endpoint); }
 
@@ -104,54 +141,3 @@ void ClientFeature::createEndpointServer(std::string const& definition) {
   // create a new endpoint
   _endpointServer = Endpoint::clientFactory(definition);
 }
-
-#warning TODO
-#if 0
-
-  if (options.has("server.username")) {
-    // if a username is specified explicitly, assume authentication is desired
-    _disableAuthentication = false;
-  }
-
-  if (_serverOptions) {
-    // check connection args
-    if (_connectTimeout < 0.0) {
-      LOG(FATAL) << "invalid value for --server.connect-timeout, must be >= 0";
-      FATAL_ERROR_EXIT();
-    } else if (_connectTimeout == 0.0) {
-      _connectTimeout = LONG_TIMEOUT;
-    }
-
-    if (_requestTimeout < 0.0) {
-      LOG(FATAL)
-          << "invalid value for --server.request-timeout, must be positive";
-      FATAL_ERROR_EXIT();
-    } else if (_requestTimeout == 0.0) {
-      _requestTimeout = LONG_TIMEOUT;
-    }
-
-    // must specify a user name
-    if (_username.size() == 0) {
-      LOG(FATAL) << "no value specified for --server.username";
-      FATAL_ERROR_EXIT();
-    }
-
-    // no password given on command-line
-    if (!_hasPassword) {
-      usleep(10 * 1000);
-      printContinuous("Please specify a password: ");
-
-// now prompt for it
-#ifdef TRI_HAVE_TERMIOS_H
-      TRI_SetStdinVisibility(false);
-      getline(std::cin, _password);
-
-      TRI_SetStdinVisibility(true);
-#else
-      getline(std::cin, _password);
-#endif
-      printLine("");
-    }
-  }
-
-#endif

@@ -34,6 +34,7 @@ class ClientFeature final : public application_features::ApplicationFeature {
  public:
   constexpr static double const DEFAULT_REQUEST_TIMEOUT = 5.0;
   constexpr static double const DEFAULT_CONNECTION_TIMEOUT = 1200.0;
+  constexpr static double const LONG_TIMEOUT = 86400.0;
 
  public:
   explicit ClientFeature(application_features::ApplicationServer* server,
@@ -70,7 +71,7 @@ class ClientFeature final : public application_features::ApplicationFeature {
   uint64_t _sslProtocol;
 
  private:
-  bool _hasPassword;
+  std::string _section;
   rest::Endpoint* _endpointServer;
 };
 }

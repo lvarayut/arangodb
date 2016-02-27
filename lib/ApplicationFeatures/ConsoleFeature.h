@@ -34,6 +34,11 @@ class ConsoleFeature final : public application_features::ApplicationFeature {
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
 
  public:
+  static void printContinuous(std::string const&);
+  static void printLine(std::string const&, bool forceNewLine = false);
+  static std::string readPassword(std::string const& message);
+
+ private:
 #ifdef WIN32
   int16_t _codePage;
 #endif

@@ -50,19 +50,24 @@ class ProgramOptions {
 
     // mark an option as being touched during options processing
     void touch(std::string const& name) { _touched.emplace(name); }
+
     // whether or not an option was touched during options processing
     bool touched(std::string const& name) const {
       return _touched.find(Option::stripPrefix(name)) != _touched.end();
     }
+
     // mark options processing as failed
     void failed(bool value) { _failed = value; }
+
     // whether or not options processing has failed
     bool failed() const { return _failed; }
 
     // values of all positional arguments found
     std::vector<std::string> _positionals;
+
     // which options were touched during option processing
     std::unordered_set<std::string> _touched;
+
     // whether or not options processing failed
     bool _failed;
   };
@@ -114,10 +119,8 @@ class ProgramOptions {
     checkIfSealed();
     _overrideOptions = value;
   }
-  
-  bool allowOverride() const {
-    return _overrideOptions;
-  }
+
+  bool allowOverride() const { return _overrideOptions; }
 
   // set context for error reporting
   void setContext(std::string const& value) { _context = value; }
@@ -167,7 +170,8 @@ class ProgramOptions {
 
   // prints a help for all options, or the options of a section
   // the special search string "*" will show help for all sections
-  // the special search string "." will show help for all sections, even if hidden
+  // the special search string "." will show help for all sections, even if
+  // hidden
   void printHelp(std::string const& search) const {
     printUsage();
 
@@ -198,10 +202,11 @@ class ProgramOptions {
   }
 
   // returns a VPack representation of the option values
-  VPackBuilder toVPack(bool onlyTouched, std::unordered_set<std::string> const& exclude) const {
+  VPackBuilder toVPack(bool onlyTouched,
+                       std::unordered_set<std::string> const& exclude) const {
     VPackBuilder builder;
     builder.openObject();
-       
+
     walk([&builder, &exclude](Section const&, Option const& option) {
       std::string full(option.fullName());
       if (exclude.find(full) != exclude.end()) {
@@ -274,7 +279,7 @@ class ProgramOptions {
     if (!_overrideOptions && _processingResult.touched(name)) {
       // option already set. don't override it
       return true;
-    } 
+    }
 
     auto parts = Option::splitName(name);
     auto it = _sections.find(parts.first);

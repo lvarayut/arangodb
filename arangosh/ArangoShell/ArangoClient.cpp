@@ -49,49 +49,6 @@ double const ArangoClient::LONG_TIMEOUT = 86400.0;
 bool cygwinShell = false;
 #endif
 namespace {
-#ifdef _WIN32
-bool _newLine() {
-  COORD pos;
-  CONSOLE_SCREEN_BUFFER_INFO bufferInfo;
-  GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &bufferInfo);
-  if (bufferInfo.dwCursorPosition.Y + 1 >= bufferInfo.dwSize.Y) {
-    // when we are at the last visible line of the console
-    // the first line of console is deleted (the content of the console
-    // is scrolled one line above
-    SMALL_RECT srctScrollRect;
-    srctScrollRect.Top = 0;
-    srctScrollRect.Bottom = bufferInfo.dwCursorPosition.Y + 1;
-    srctScrollRect.Left = 0;
-    srctScrollRect.Right = bufferInfo.dwSize.X;
-    COORD coordDest;
-    coordDest.X = 0;
-    coordDest.Y = -1;
-    CONSOLE_SCREEN_BUFFER_INFO consoleScreenBufferInfo;
-    CHAR_INFO chiFill;
-    chiFill.Char.AsciiChar = (char)' ';
-    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE),
-                                   &consoleScreenBufferInfo)) {
-      chiFill.Attributes = consoleScreenBufferInfo.wAttributes;
-    } else {
-      // Fill the bottom row with green blanks.
-      chiFill.Attributes = BACKGROUND_GREEN | FOREGROUND_RED;
-    }
-    ScrollConsoleScreenBuffer(GetStdHandle(STD_OUTPUT_HANDLE), &srctScrollRect,
-                              nullptr, coordDest, &chiFill);
-    pos.Y = bufferInfo.dwCursorPosition.Y;
-    pos.X = 0;
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-    return true;
-  } else {
-    pos.Y = bufferInfo.dwCursorPosition.Y + 1;
-    pos.X = 0;
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-    return false;
-  }
-}
-
-#endif
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief ignore sequence used for prompt length calculation (starting point)
@@ -253,77 +210,8 @@ void ArangoClient::printErrLine(std::string const& s) {
 /// @brief prints a string and a newline to stdout
 ////////////////////////////////////////////////////////////////////////////////
 
-void ArangoClient::_printLine(std::string const& s) {
-#ifdef _WIN32
-  LPWSTR wBuf = (LPWSTR)TRI_Allocate(TRI_CORE_MEM_ZONE,
-                                     (sizeof WCHAR) * (s.size() + 1), true);
-  int wLen = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, wBuf,
-                                 (int)((sizeof WCHAR) * (s.size() + 1)));
-
-  if (wLen) {
-    DWORD n;
-    COORD pos;
-    CONSOLE_SCREEN_BUFFER_INFO bufferInfo;
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &bufferInfo);
-    // save old cursor position
-    pos = bufferInfo.dwCursorPosition;
-
-    size_t newX = static_cast<size_t>(pos.X) + s.size();
-    // size_t oldY = static_cast<size_t>(pos.Y);
-    if (newX >= static_cast<size_t>(bufferInfo.dwSize.X)) {
-      for (size_t i = 0; i <= newX / bufferInfo.dwSize.X; ++i) {
-        // insert as many newlines as we need. this prevents running out of
-        // buffer space when printing lines
-        // at the end of the console output buffer
-        if (_newLine()) {
-          pos.Y = pos.Y - 1;
-        }
-      }
-    }
-
-    // save new cursor position
-    GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &bufferInfo);
-    auto newPos = bufferInfo.dwCursorPosition;
-
-    // print the actual string. note: printing does not advance the cursor
-    // position
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-    WriteConsoleOutputCharacterW(GetStdHandle(STD_OUTPUT_HANDLE), wBuf,
-                                 (DWORD)s.size(), pos, &n);
-
-    // finally set the cursor position to where the printing should have
-    // stopped
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), newPos);
-  } else {
-    fprintf(stdout, "window error: '%d' \r\n", GetLastError());
-    fprintf(stdout, "%s\r\n", s.c_str());
-  }
-
-  if (wBuf) {
-    TRI_Free(TRI_CORE_MEM_ZONE, wBuf);
-  }
-#endif
-}
-
 void ArangoClient::printLine(std::string const& s, bool forceNewLine) {
-#if _WIN32
-  if (!cygwinShell) {
-    // no, we cannot use std::cout as this doesn't support UTF-8 on Windows
-    // fprintf(stdout, "%s\r\n", s.c_str());
-    TRI_vector_string_t subStrings = TRI_SplitString(s.c_str(), '\n');
-    bool hasNewLines = (s.find("\n") != std::string::npos) | forceNewLine;
-    if (hasNewLines) {
-      for (size_t i = 0; i < subStrings._length; i++) {
-        _printLine(subStrings._buffer[i]);
-        _newLine();
-      }
-    } else {
-      _printLine(s);
-    }
-    TRI_DestroyVectorString(&subStrings);
-  } else
-#endif
-    fprintf(stdout, "%s\n", s.c_str());
+#warning moved to ConsoleFeature
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -332,14 +220,7 @@ void ArangoClient::printLine(std::string const& s, bool forceNewLine) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void ArangoClient::printContinuous(std::string const& s) {
-// no, we cannot use std::cout as this doesn't support UTF-8 on Windows
-#ifdef _WIN32
-  // On Windows, we just print the line followed by a newline
-  printLine(s, true);
-#else
-  fprintf(stdout, "%s", s.c_str());
-  fflush(stdout);
-#endif
+#warning moved to ConsoleFeature
 }
 
 ////////////////////////////////////////////////////////////////////////////////
