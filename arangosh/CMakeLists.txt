@@ -95,9 +95,9 @@ endif ()
 add_executable(${BIN_ARANGOIMP}
   ${ProductVersionFiles_arangoimp}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
-  ArangoShell/ArangoClient.cpp
-  V8Client/ImportHelper.cpp
-  V8Client/arangoimp.cpp
+  Import/ArangoimpFeature.cpp
+  Import/ImportHelper.cpp
+  Import/arangoimp.cpp
 )
 target_link_libraries(${BIN_ARANGOIMP}
   ${LIB_ARANGO}
@@ -168,7 +168,6 @@ add_executable(${BIN_ARANGOSH}
   ${ProductVersionFiles_arangosh}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
   ArangoShell/ArangoClient.cpp
-  V8Client/ImportHelper.cpp
   V8Client/V8ClientConnection.cpp
   V8Client/arangosh.cpp
 )

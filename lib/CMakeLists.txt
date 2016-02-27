@@ -138,6 +138,7 @@ add_library(${LIB_ARANGO} STATIC
   ApplicationFeatures/ConsoleFeature.cpp
   ApplicationFeatures/DatabaseFeature.cpp
   ApplicationFeatures/LoggerFeature.cpp
+  ApplicationFeatures/ShutdownFeature.cpp
   ApplicationFeatures/SslFeature.cpp
   ApplicationFeatures/TempFeature.cpp
   Basics/AttributeNameParser.cpp

@@ -27,14 +27,12 @@
 #include "ApplicationFeatures/ConfigFeature.h"
 #include "ApplicationFeatures/LoggerFeature.h"
 #include "ApplicationFeatures/ShutdownFeature.h"
-#include "Benchmark/ArangobFeature.h"
+#include "Import/ArangoimpFeature.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/InitializeRest.h"
 
 using namespace arangodb;
 using namespace arangodb::application_features;
-using namespace arangodb::basics;
-using namespace arangodb::rest;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief main
@@ -45,7 +43,7 @@ int main(int argc, char* argv[]) {
   TRIAGENS_REST_INITIALIZE();
 
   std::shared_ptr<options::ProgramOptions> options(new options::ProgramOptions(
-      argv[0], "Usage: arangob [<options>]", "For more information use:"));
+      argv[0], "Usage: arangoimp [<options>]", "For more information use:"));
 
   ApplicationServer server(options);
 
@@ -54,8 +52,8 @@ int main(int argc, char* argv[]) {
   server.addFeature(new LoggerFeature(&server));
   server.addFeature(new ConfigFeature(&server, "arangob"));
   server.addFeature(new ClientFeature(&server));
-  server.addFeature(new ArangobFeature(&server, &ret));
-  server.addFeature(new ShutdownFeature(&server, "ArangobFeature"));
+  server.addFeature(new ArangoimpFeature(&server, &ret));
+  server.addFeature(new ShutdownFeature(&server, "ArangoimpFeature"));
 
   server.run(argc, argv);
 

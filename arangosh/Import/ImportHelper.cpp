@@ -122,7 +122,7 @@ static bool IsDecimal(char const* field, size_t fieldLength) {
 }
 
 namespace arangodb {
-namespace v8client {
+namespace import {
 
 ////////////////////////////////////////////////////////////////////////////////
 /// initialize step value for progress reports

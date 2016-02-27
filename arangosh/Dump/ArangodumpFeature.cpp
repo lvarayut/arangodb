@@ -1236,9 +1236,7 @@ void ArangodumpFeature::start() {
     }
   }
 
-  delete _httpClient;
-
   *_result = ret;
-
-  server()->beginShutdown();
 }
+
+void ArangodumpFeature::stop() { delete _httpClient; }

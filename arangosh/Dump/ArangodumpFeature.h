@@ -35,8 +35,8 @@ class SimpleHttpResult;
 class ArangodumpFeature final
     : public application_features::ApplicationFeature {
  public:
-  explicit ArangodumpFeature(application_features::ApplicationServer* server,
-                             int* result);
+  ArangodumpFeature(application_features::ApplicationServer* server,
+                    int* result);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
@@ -44,6 +44,7 @@ class ArangodumpFeature final
       std::shared_ptr<options::ProgramOptions> options) override;
   void prepare() override;
   void start() override;
+  void stop() override;
 
  private:
   std::vector<std::string> _collections;
@@ -68,7 +69,7 @@ class ArangodumpFeature final
   int dumpCollection(int fd, std::string const& cid, std::string const& name,
                      uint64_t maxTick, std::string& errorMsg);
   void flushWal();
-  int runDump(std::string& dbName,std::string& errorMsg);
+  int runDump(std::string& dbName, std::string& errorMsg);
   int dumpShard(int fd, std::string const& DBserver, std::string const& name,
                 std::string& errorMsg);
   int RunClusterDump(std::string& errorMsg);

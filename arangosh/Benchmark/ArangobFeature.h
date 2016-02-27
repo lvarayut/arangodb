@@ -28,8 +28,7 @@
 namespace arangodb {
 class ArangobFeature final : public application_features::ApplicationFeature {
  public:
-  explicit ArangobFeature(application_features::ApplicationServer* server,
-                          int* result);
+  ArangobFeature(application_features::ApplicationServer* server, int* result);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;

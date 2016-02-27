@@ -26,6 +26,7 @@
 #include "ApplicationFeatures/ClientFeature.h"
 #include "ApplicationFeatures/ConfigFeature.h"
 #include "ApplicationFeatures/LoggerFeature.h"
+#include "ApplicationFeatures/ShutdownFeature.h"
 #include "Dump/ArangodumpFeature.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/InitializeRest.h"
@@ -52,6 +53,7 @@ int main(int argc, char* argv[]) {
   server.addFeature(new ConfigFeature(&server, "arangodump"));
   server.addFeature(new ClientFeature(&server));
   server.addFeature(new ArangodumpFeature(&server, &ret));
+  server.addFeature(new ShutdownFeature(&server, "ArangodumpFeature"));
 
   server.run(argc, argv);
 

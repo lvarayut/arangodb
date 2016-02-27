@@ -160,9 +160,9 @@ void ArangobFeature::start() {
   *_result = ret;
   ARANGOB = this;
 
-  BenchmarkOperation* testCase = GetTestCase(_testCase);
+  std::unique_ptr<BenchmarkOperation> benchmark = GetTestCase(_testCase);
 
-  if (testCase == nullptr) {
+  if (benchmark == nullptr) {
     ARANGOB = nullptr;
     LOG(FATAL) << "invalid test case name '" << _testCase << "'";
     FATAL_ERROR_EXIT();
@@ -206,7 +206,7 @@ void ArangobFeature::start() {
     endpoints.push_back(endpoint);
 
     BenchmarkThread* thread = new BenchmarkThread(
-        testCase, &startCondition, &ArangobFeature::updateStartCounter, i,
+        benchmark, &startCondition, &ArangobFeature::updateStartCounter, i,
         (unsigned long)_batchSize, &operationsCounter, endpoint,
         client->databaseName(), client->username(), client->password(),
         client->requestTimeout(), client->connectionTimeout(),
@@ -302,15 +302,14 @@ void ArangobFeature::start() {
             << std::endl;
 
   if (failures > 0) {
-    std::cerr << "WARNING: " << failures << " arangob request(s) failed!!"
-              << std::endl;
+    LOG(WARN) << "WARNING: " << failures << " arangob request(s) failed!";
   }
   if (incomplete > 0) {
-    std::cerr << "WARNING: " << incomplete
-              << " arangob requests with incomplete results!!" << std::endl;
+    LOG(WARN) << "WARNING: " << incomplete
+              << " arangob requests with incomplete results!"
   }
 
-  testCase->tearDown();
+  benchmark->tearDown();
 
   for (int i = 0; i < _concurreny; ++i) {
     threads[i]->beginShutdown();
@@ -318,14 +317,13 @@ void ArangobFeature::start() {
     delete endpoints[i];
   }
 
-  delete testCase;
-
   if (failures > 0) {
     ret = EXIT_FAILURE;
   }
 
   *_result = ret;
-  ARANGOB = nullptr;
+}
 
-  server()->beginShutdown();
+void ArangobFeature::start() {
+  ARANGOB = nullptr;
 }
