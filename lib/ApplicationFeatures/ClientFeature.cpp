@@ -82,17 +82,19 @@ void ClientFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
                      "request timeout in seconds",
                      new DoubleParameter(&_requestTimeout));
 
+  std::unordered_set<uint64_t> sslProtocols = {1, 2, 3, 4};
+
   options->addOption("--" + section + ".ssl-protocol",
                      "1 = SSLv2, 2 = SSLv23, 3 = SSLv3, 4 = TLSv1",
-                     new UInt64Parameter(&_sslProtocol));
+                     new DiscreteValuesParameter<UInt64Parameter>(
+                         &_sslProtocol, sslProtocols));
 }
 
-void ClientFeature::createEndpointServer() {
-  createEndpointServer(_endpoint);
-}
+void ClientFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {}
+
+void ClientFeature::createEndpointServer() { createEndpointServer(_endpoint); }
 
 void ClientFeature::createEndpointServer(std::string const& definition) {
-
   // close previous endpoint
   if (_endpointServer != nullptr) {
     delete _endpointServer;

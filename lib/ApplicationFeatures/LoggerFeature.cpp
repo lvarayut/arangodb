@@ -22,7 +22,7 @@
 
 #include "ApplicationFeatures/LoggerFeature.h"
 
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
 
@@ -44,8 +44,7 @@ LoggerFeature::LoggerFeature(application_features::ApplicationServer* server)
 }
 
 void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
-  options->addSection(
-      Section("log", "Configure the logging", "logging options", false, false));
+  options->addSection("log", "Configure the logging");
 
   options->addOption("--log.output,-o", "log destination(s)",
                      new VectorParameter<StringParameter>(&_output));
@@ -57,22 +56,20 @@ void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
                      "use local timezone instead of UTC",
                      new BooleanParameter(&_useLocalTime));
 
-  options->addSection(Section("log-hidden", "Configure the logging",
-                              "hidden logging options", true, false));
+  options->addHiddenOption(
+      "--log.prefix", "adds a prefix in case multiple instances are running",
+      new StringParameter(&_prefix));
 
-  options->addOption("--log.prefix",
-                     "adds a prefix in case multiple instances are running",
-                     new StringParameter(&_prefix));
+  options->addHiddenOption("--log.file",
+                           "shortcut for '--log.output file://<filename>'",
+                           new VectorParameter<StringParameter>(&_file));
 
-  options->addOption("--log.file",
-                     "shortcut for '--log.output file://<filename>'",
-                     new VectorParameter<StringParameter>(&_file));
+  options->addHiddenOption("--log.line-number",
+                           "append line number and file name",
+                           new BooleanParameter(&_lineNumber));
 
-  options->addOption("--log.line-number", "append line number and file name",
-                     new BooleanParameter(&_lineNumber));
-
-  options->addOption("--log.thread", "append a thread identifier",
-                     new BooleanParameter(&_thread));
+  options->addHiddenOption("--log.thread", "append a thread identifier",
+                           new BooleanParameter(&_thread));
 }
 
 void LoggerFeature::loadOptions(std::shared_ptr<options::ProgramOptions>) {

@@ -34,7 +34,7 @@
 #include "Basics/Exceptions.h"
 #include "Basics/StringBuffer.h"
 #include "Basics/files.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/tri-strings.h"
 
 #if defined(_WIN32) && defined(_MSC_VER)

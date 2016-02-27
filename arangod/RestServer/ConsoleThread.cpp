@@ -26,7 +26,7 @@
 #include <iostream>
 
 #include "ApplicationServer/ApplicationServer.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/tri-strings.h"
 #include "Basics/MutexLocker.h"
 #include "Rest/Version.h"

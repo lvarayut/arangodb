@@ -26,7 +26,7 @@
 #include <iostream>
 
 #include "ArangoShell/ArangoClient.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/Mutex.h"
 #include "Basics/StringBuffer.h"
 #include "Basics/StringUtils.h"

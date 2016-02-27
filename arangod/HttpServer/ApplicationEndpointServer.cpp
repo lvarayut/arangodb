@@ -29,7 +29,7 @@
 #include "Basics/RandomGenerator.h"
 #include "Basics/ReadLocker.h"
 #include "Basics/WriteLocker.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/ssl-helper.h"
 #include "Basics/VelocyPackHelper.h"
 #include "Dispatcher/ApplicationDispatcher.h"

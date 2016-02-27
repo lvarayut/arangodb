@@ -26,7 +26,7 @@
 
 #include "Basics/MutexLocker.h"
 #include "Basics/StringBuffer.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "HttpServer/HttpHandler.h"
 #include "HttpServer/HttpHandlerFactory.h"
 #include "HttpServer/HttpServer.h"

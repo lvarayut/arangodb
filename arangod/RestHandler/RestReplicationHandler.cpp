@@ -25,7 +25,7 @@
 #include "Basics/conversions.h"
 #include "Basics/files.h"
 #include "Basics/JsonHelper.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/ReadLocker.h"
 #include "Basics/VelocyPackHelper.h"
 #include "Cluster/ClusterMethods.h"

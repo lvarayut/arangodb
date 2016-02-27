@@ -24,7 +24,7 @@
 
 #include "ApplicationFeatures/ApplicationFeature.h"
 #include "ProgramOptions2/ArgumentParser.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 
 using namespace arangodb::application_features;
 using namespace arangodb::options;
@@ -97,6 +97,9 @@ void ApplicationServer::run(int argc, char* argv[]) {
   // parse the command line parameters and load any configuration
   // file(s)
   parseOptions(argc, argv);
+
+  // seal the options
+  _options->seal();
 
   // validate options of all features
   // in this phase, all features are stil order-independent
@@ -197,7 +200,7 @@ void ApplicationServer::parseOptions(int argc, char* argv[]) {
 }
 
 void ApplicationServer::validateOptions() {
-  LOG(TRACE) << "ApplicationServer::vaiidateOptions";
+  LOG(TRACE) << "ApplicationServer::validateOptions";
 
   apply([this](ApplicationFeature* feature) {
     feature->validateOptions(_options);

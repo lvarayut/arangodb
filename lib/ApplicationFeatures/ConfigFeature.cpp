@@ -22,7 +22,7 @@
 
 #include "ApplicationFeatures/ConfigFeature.h"
 
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/FileUtils.h"
 #include "Basics/StringUtils.h"
 #include "ProgramOptions2/IniFileParser.h"

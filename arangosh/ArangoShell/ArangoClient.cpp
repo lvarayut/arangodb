@@ -24,7 +24,7 @@
 #include "ArangoClient.h"
 
 #include "Basics/FileUtils.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/ProgramOptions.h"
 #include "Basics/ProgramOptionsDescription.h"
 #include "Basics/StringUtils.h"

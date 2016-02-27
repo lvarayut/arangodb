@@ -29,7 +29,7 @@
 #include "Basics/ConditionLocker.h"
 #include "Basics/ConditionVariable.h"
 #include "Basics/Exceptions.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/Thread.h"
 #include "Basics/hashes.h"
 #include "Benchmark/BenchmarkCounter.h"

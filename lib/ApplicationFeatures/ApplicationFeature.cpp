@@ -23,7 +23,7 @@
 #include "ApplicationFeature.h"
 
 #include "ApplicationFeatures/ApplicationServer.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 
 using namespace arangodb::application_features;
 using namespace arangodb::options;

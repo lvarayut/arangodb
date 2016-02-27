@@ -24,7 +24,7 @@
 
 #include "SimpleHttpClient.h"
 #include "Basics/JsonHelper.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/StringUtils.h"
 #include "GeneralClientConnection.h"
 #include "SimpleHttpClient/SimpleHttpResult.h"

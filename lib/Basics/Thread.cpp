@@ -29,7 +29,7 @@
 
 #include "Basics/ConditionLocker.h"
 #include "Basics/Exceptions.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/WorkMonitor.h"
 
 #include <velocypack/Builder.h>

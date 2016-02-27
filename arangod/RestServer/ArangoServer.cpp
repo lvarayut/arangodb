@@ -42,7 +42,7 @@
 #include "Aql/QueryCache.h"
 #include "Aql/RestAqlHandler.h"
 #include "Basics/FileUtils.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/Nonce.h"
 #include "Basics/ProgramOptions.h"
 #include "Basics/ProgramOptionsDescription.h"

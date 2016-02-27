@@ -32,7 +32,7 @@
 #endif
 
 #include "Basics/Exceptions.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Scheduler/SchedulerThread.h"
 #include "Scheduler/Task.h"
 

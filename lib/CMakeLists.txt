@@ -148,7 +148,6 @@ add_library(${LIB_ARANGO} STATIC
   Basics/Exceptions.cpp
   Basics/FileUtils.cpp
   Basics/JsonHelper.cpp
-  Basics/Logger.cpp
   Basics/Mutex.cpp
   Basics/MutexLocker.cpp
   Basics/Nonce.cpp
@@ -194,6 +193,7 @@ add_library(${LIB_ARANGO} STATIC
   Basics/voc-errors.cpp
   Basics/voc-mimetypes.cpp
   JsonParser/json-parser.cpp
+  Logger/Logger.cpp
   ProgramOptions/program-options.cpp
   Rest/Endpoint.cpp
   Rest/EndpointIp.cpp

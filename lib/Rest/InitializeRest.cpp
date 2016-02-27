@@ -34,7 +34,7 @@
 #error missing thread support for openssl, please recomple OpenSSL with threads
 #endif
 
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/RandomGenerator.h"
 #include "Basics/error.h"
 #include "Basics/files.h"

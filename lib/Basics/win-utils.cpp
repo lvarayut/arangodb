@@ -32,7 +32,7 @@
 #include <malloc.h>
 #include <crtdbg.h>
 
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/files.h"
 #include "Basics/StringUtils.h"
 #include "Basics/tri-strings.h"

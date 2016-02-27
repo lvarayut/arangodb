@@ -51,7 +51,7 @@
 #include <TlHelp32.h>
 #endif
 
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/MutexLocker.h"
 #include "Basics/StringBuffer.h"
 #include "Basics/StringUtils.h"

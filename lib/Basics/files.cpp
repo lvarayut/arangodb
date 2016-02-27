@@ -40,7 +40,7 @@
 #include "Basics/conversions.h"
 #include "Basics/hashes.h"
 #include "Basics/locks.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Basics/random.h"
 #include "Basics/StringBuffer.h"
 #include "Basics/Thread.h"

@@ -28,7 +28,7 @@
 #include "Basics/Common.h"
 
 #include "Basics/StringBuffer.h"
-#include "Basics/Logger.h"
+#include "Logger/Logger.h"
 #include "Rest/HttpRequest.h"
 
 namespace arangodb {
