@@ -34,6 +34,7 @@ class ClientFeature final : public application_features::ApplicationFeature {
  public:
   constexpr static double const DEFAULT_REQUEST_TIMEOUT = 5.0;
   constexpr static double const DEFAULT_CONNECTION_TIMEOUT = 1200.0;
+  constexpr static size_t const DEFAULT_RETRIES = 2;
   constexpr static double const LONG_TIMEOUT = 86400.0;
 
  public:

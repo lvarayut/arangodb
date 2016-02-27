@@ -18,7 +18,7 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Dr. Frank Celler
+/// @author Jan Steemann
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "Basics/Common.h"
@@ -26,14 +26,12 @@
 #include "ApplicationFeatures/ClientFeature.h"
 #include "ApplicationFeatures/ConfigFeature.h"
 #include "ApplicationFeatures/LoggerFeature.h"
-#include "Benchmark/ArangobFeature.h"
+#include "Dump/ArangodumpFeature.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/InitializeRest.h"
 
 using namespace arangodb;
 using namespace arangodb::application_features;
-using namespace arangodb::basics;
-using namespace arangodb::rest;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief main
@@ -44,16 +42,16 @@ int main(int argc, char* argv[]) {
   TRIAGENS_REST_INITIALIZE();
 
   std::shared_ptr<options::ProgramOptions> options(new options::ProgramOptions(
-      argv[0], "Usage: arangob [<options>]", "For more information use:"));
+      argv[0], "Usage: arangodump [<options>]", "For more information use:"));
 
   ApplicationServer server(options);
 
   int ret;
 
   server.addFeature(new LoggerFeature(&server));
-  server.addFeature(new ConfigFeature(&server, "arangob"));
+  server.addFeature(new ConfigFeature(&server, "arangodump"));
   server.addFeature(new ClientFeature(&server));
-  server.addFeature(new ArangobFeature(&server, &ret));
+  server.addFeature(new ArangodumpFeature(&server, &ret));
 
   server.run(argc, argv);
 

@@ -191,7 +191,9 @@ static inline uint32_t TRI_64to32(uint64_t x) {
 #else
 
 #ifndef TRI_ASSERT
-#define TRI_ASSERT(expr) do { } while (0)
+#define TRI_ASSERT(expr) \
+  do {                   \
+  } while (0)
 #endif
 
 #endif
@@ -217,6 +219,9 @@ static inline uint32_t TRI_64to32(uint64_t x) {
 
 #ifdef _WIN32
 #include "Basics/win-utils.h"
+#else
+inline void ADB_WindowsEntryFunction() {}
+inline void ADB_WindowsExitFunction(int exitCode, void* data) {}
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////

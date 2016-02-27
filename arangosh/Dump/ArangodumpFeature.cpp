@@ -1,8 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 /// DISCLAIMER
 ///
-/// Copyright 2014-2016 ArangoDB GmbH, Cologne, Germany
-/// Copyright 2004-2014 triAGENS GmbH, Cologne, Germany
+/// Copyright 2016 ArangoDB GmbH, Cologne, Germany
 ///
 /// Licensed under the Apache License, Version 2.0 (the "License");
 /// you may not use this file except in compliance with the License.
@@ -21,26 +20,23 @@
 /// @author Jan Steemann
 ////////////////////////////////////////////////////////////////////////////////
 
-#include "Basics/Common.h"
+#include "ArangodumpFeature.h"
 
 #include <iostream>
 
 #include <velocypack/Iterator.h>
 #include <velocypack/velocypack-aliases.h>
 
+#include "ApplicationFeatures/ClientFeature.h"
 #include "ArangoShell/ArangoClient.h"
 #include "Basics/FileUtils.h"
-#include "Basics/ProgramOptions.h"
-#include "Basics/ProgramOptionsDescription.h"
 #include "Basics/StringUtils.h"
 #include "Basics/VelocyPackHelper.h"
-#include "Basics/VelocyPackHelper.h"
 #include "Basics/files.h"
-#include "Basics/terminal-utils.h"
 #include "Basics/tri-strings.h"
+#include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/Endpoint.h"
 #include "Rest/HttpResponse.h"
-#include "Rest/InitializeRest.h"
 #include "Rest/SslInterface.h"
 #include "SimpleHttpClient/GeneralClientConnection.h"
 #include "SimpleHttpClient/SimpleHttpClient.h"
@@ -49,217 +45,165 @@
 using namespace arangodb;
 using namespace arangodb::basics;
 using namespace arangodb::httpclient;
+using namespace arangodb::options;
 using namespace arangodb::rest;
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief base class for clients
-////////////////////////////////////////////////////////////////////////////////
+ArangodumpFeature::ArangodumpFeature(
+    application_features::ApplicationServer* server, int* result)
+    : ApplicationFeature(server, "ArangodumpFeature"),
+      _collections(),
+      _chunkSize(1024 * 1024 * 2),
+      _maxChunkSize(1024 * 1024 * 12),
+      _dumpData(true),
+      _force(false),
+      _includeSystemCollections(false),
+      _outputDirectory(),
+      _overwrite(false),
+      _progress(true),
+      _tickStart(0),
+      _tickEnd(0),
+      _result(result),
+      _connection(nullptr),
+      _httpClient(nullptr),
+      _batchId(0),
+      _clusterMode(false) {
+  requiresElevatedPrivileges(false);
+  setOptional(false);
+  startsAfter("ConfigFeature");
+  startsAfter("LoggerFeature");
+}
 
-ArangoClient BaseClient("arangodump");
+void ArangodumpFeature::collectOptions(
+    std::shared_ptr<options::ProgramOptions> options) {
+  options->addSection(
+      Section("", "Global configuration", "global options", false, false));
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief the initial default connection
-////////////////////////////////////////////////////////////////////////////////
+  options->addOption(
+      "--collection",
+      "restrict to collection name (can be specified multiple times)",
+      new VectorParameter<StringParameter>(&_collections));
 
-arangodb::httpclient::GeneralClientConnection* Connection = nullptr;
+  options->addOption("--initial-batch-size",
+                     "initial size for individual data batches (in bytes)",
+                     new UInt64Parameter(&_chunkSize));
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief HTTP client
-////////////////////////////////////////////////////////////////////////////////
+  options->addOption("--batch-size",
+                     "initial size for individual data batches (in bytes)",
+                     new UInt64Parameter(&_maxChunkSize));
 
-arangodb::httpclient::SimpleHttpClient* Client = nullptr;
+  options->addOption("--dump-data", "dump collection data",
+                     new BooleanParameter(&_dumpData));
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief chunk size
-////////////////////////////////////////////////////////////////////////////////
+  options->addOption(
+      "--force", "continue dumping even in the face of some server-side errors",
+      new BooleanParameter(&_force, false));
 
-static uint64_t ChunkSize = 1024 * 1024 * 2;
+  options->addOption("--include-system-collections",
+                     "include system collections",
+                     new BooleanParameter(&_includeSystemCollections));
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief max chunk size
-////////////////////////////////////////////////////////////////////////////////
+  options->addOption("--output-directory", "output directory",
+                     new StringParameter(&_outputDirectory));
 
-static uint64_t MaxChunkSize = 1024 * 1024 * 12;
+  options->addOption("--overwrite", "overwrite data in output directory",
+                     new BooleanParameter(&_overwrite, false));
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief collections
-////////////////////////////////////////////////////////////////////////////////
+  options->addOption("--progress", "show progress",
+                     new BooleanParameter(&_progress));
 
-static std::vector<std::string> Collections;
+  options->addOption("--tick-start", "only include data after this tick",
+                     new UInt64Parameter(&_tickStart));
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief include system collections
-////////////////////////////////////////////////////////////////////////////////
+  options->addOption("--tick-end", "last tick to be included in data dump",
+                     new UInt64Parameter(&_tickEnd));
+}
 
-static bool IncludeSystemCollections;
+void ArangodumpFeature::validateOptions(
+    std::shared_ptr<options::ProgramOptions> options) {
+  auto const& positionals = options->processingResult()._positionals;
+  size_t n = positionals.size();
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief output directory
-////////////////////////////////////////////////////////////////////////////////
+  if (1 == n) {
+    _outputDirectory = positionals[0];
+  } else if (1 < n) {
+    LOG(ERR) << "expecting at most one directory, got " +
+                    StringUtils::join(positionals, ", ");
+    abortInvalidParameters();
+  }
 
-static std::string OutputDirectory;
+  if (_chunkSize < 1024 * 128) {
+    _chunkSize = 1024 * 128;
+  }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief overwrite output directory
-////////////////////////////////////////////////////////////////////////////////
+  if (_maxChunkSize < _chunkSize) {
+    _maxChunkSize = _chunkSize;
+  }
 
-static bool Overwrite = false;
+  if (_tickStart < _tickEnd) {
+    LOG(ERR) << "invalid values for --tick-start or --tick-end";
+    abortInvalidParameters();
+  }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief progress
-////////////////////////////////////////////////////////////////////////////////
-
-static bool Progress = true;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief go on even in the face of errors
-////////////////////////////////////////////////////////////////////////////////
-
-static bool Force = false;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief save data
-////////////////////////////////////////////////////////////////////////////////
-
-static bool DumpData = true;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief first tick to be included in data dump
-////////////////////////////////////////////////////////////////////////////////
-
-static uint64_t TickStart = 0;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief last tick to be included in data dump
-////////////////////////////////////////////////////////////////////////////////
-
-static uint64_t TickEnd = 0;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief our batch id
-////////////////////////////////////////////////////////////////////////////////
-
-static uint64_t BatchId = 0;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief cluster mode flag
-////////////////////////////////////////////////////////////////////////////////
-
-static bool clusterMode = false;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief statistics
-////////////////////////////////////////////////////////////////////////////////
-
-static struct {
-  uint64_t _totalBatches;
-  uint64_t _totalCollections;
-  uint64_t _totalWritten;
-} Stats;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief parses the program options
-////////////////////////////////////////////////////////////////////////////////
-
-static void ParseProgramOptions(int argc, char* argv[]) {
-  ProgramOptionsDescription description("STANDARD options");
-
-  description("collection", &Collections,
-              "restrict to collection name (can be specified multiple times)")(
-      "initial-batch-size", &ChunkSize,
-      "initial size for individual data batches (in bytes)")(
-      "batch-size", &MaxChunkSize,
-      "maximum size for individual data batches (in bytes)")(
-      "dump-data", &DumpData, "dump collection data")(
-      "force", &Force,
-      "continue dumping even in the face of some server-side errors")(
-      "include-system-collections", &IncludeSystemCollections,
-      "include system collections")("output-directory", &OutputDirectory,
-                                    "output directory")(
-      "overwrite", &Overwrite, "overwrite data in output directory")(
-      "progress", &Progress, "show progress")(
-      "tick-start", &TickStart, "only include data after this tick")(
-      "tick-end", &TickEnd, "last tick to be included in data dump");
-
-  BaseClient.setupGeneral(description);
-  BaseClient.setupServer(description);
-
-  std::vector<std::string> arguments;
-  description.arguments(&arguments);
-
-  ProgramOptions options;
-  BaseClient.parse(options, description, "", argc, argv, "arangodump.conf");
-
-  if (1 == arguments.size()) {
-    OutputDirectory = arguments[0];
+  // trim trailing slash from path because it may cause problems on ...
+  // Windows
+  if (!_outputDirectory.empty() &&
+      _outputDirectory.back() == TRI_DIR_SEPARATOR_CHAR) {
+    TRI_ASSERT(_outputDirectory.size() > 0);
+    _outputDirectory.pop_back();
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief startup and exit functions
-////////////////////////////////////////////////////////////////////////////////
+void ArangodumpFeature::prepare() {
+  bool isDirectory = false;
+  bool isEmptyDirectory = false;
 
-static void LocalEntryFunction();
-static void LocalExitFunction(int, void*);
+  if (!_outputDirectory.empty()) {
+    isDirectory = TRI_IsDirectory(_outputDirectory.c_str());
 
-#ifdef _WIN32
-
-// .............................................................................
-// Call this function to do various initializations for windows only
-// .............................................................................
-
-static void LocalEntryFunction() {
-  int maxOpenFiles = 1024;
-  int res = 0;
-
-  // ...........................................................................
-  // Uncomment this to call this for extended debug information.
-  // If you familiar with valgrind ... then this is not like that, however
-  // you do get some similar functionality.
-  // ...........................................................................
-  // res = initializeWindows(TRI_WIN_INITIAL_SET_DEBUG_FLAG, 0);
-
-  res = initializeWindows(TRI_WIN_INITIAL_SET_INVALID_HANLE_HANDLER, 0);
-  if (res != 0) {
-    _exit(1);
+    if (isDirectory) {
+      TRI_vector_string_t files =
+          TRI_FullTreeDirectory(_outputDirectory.c_str());
+      // we don't care if the target directory is empty
+      isEmptyDirectory = (files._length == 0);
+      TRI_DestroyVectorString(&files);
+    }
   }
 
-  res = initializeWindows(TRI_WIN_INITIAL_SET_MAX_STD_IO,
-                          (char const*)(&maxOpenFiles));
-  if (res != 0) {
-    _exit(1);
+  if (_outputDirectory.empty() ||
+      (TRI_ExistsFile(_outputDirectory.c_str()) && !isDirectory)) {
+    LOG(FATAL) << "cannot write to output directory '" << _outputDirectory
+               << "'";
+    FATAL_ERROR_EXIT();
   }
 
-  res = initializeWindows(TRI_WIN_INITIAL_WSASTARTUP_FUNCTION_CALL, 0);
-  if (res != 0) {
-    _exit(1);
+  if (isDirectory && !isEmptyDirectory && !_overwrite) {
+    LOG(FATAL) << "output directory '" << _outputDirectory
+               << "' already exists. use \"--overwrite true\" to "
+                  "overwrite data in it";
+    FATAL_ERROR_EXIT();
   }
 
-  TRI_Application_Exit_SetExit(LocalExitFunction);
+  if (!isDirectory) {
+    long systemError;
+    std::string errorMessage;
+    int res = TRI_CreateDirectory(_outputDirectory.c_str(), systemError,
+                                  errorMessage);
+
+    if (res != TRI_ERROR_NO_ERROR) {
+      LOG(ERR) << "unable to create output directory '" << _outputDirectory
+               << "': " << errorMessage;
+      FATAL_ERROR_EXIT();
+    }
+  }
+
+  int err = 0;
+  _outputDirectory = FileUtils::currentDirectory(&err)
+                         .append(TRI_DIR_SEPARATOR_STR)
+                         .append("dump");
 }
 
-static void LocalExitFunction(int exitCode, void* data) {
-  int res = finalizeWindows(TRI_WIN_FINAL_WSASTARTUP_FUNCTION_CALL, 0);
-
-  if (res != 0) {
-    exit(1);
-  }
-
-  exit(exitCode);
-}
-#else
-
-static void LocalEntryFunction() {}
-
-static void LocalExitFunction(int exitCode, void* data) {}
-
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief extract an error message from a response
-////////////////////////////////////////////////////////////////////////////////
-
-static std::string GetHttpErrorMessage(SimpleHttpResult* result) {
+// extract an error message from a response
+std::string ArangodumpFeature::getHttpErrorMessage(SimpleHttpResult* result) {
   std::string details;
   try {
     std::shared_ptr<VPackBuilder> parsedBody = result->getBodyVelocyPack();
@@ -283,12 +227,9 @@ static std::string GetHttpErrorMessage(SimpleHttpResult* result) {
          result->getHttpReturnMessage() + ")" + details;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief fetch the version from the server
-////////////////////////////////////////////////////////////////////////////////
-
-static std::string GetArangoVersion() {
-  std::unique_ptr<SimpleHttpResult> response(Client->request(
+// fetch the version from the server
+std::string ArangodumpFeature::getArangoVersion() {
+  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
       HttpRequest::HTTP_REQUEST_GET, "/_api/version", nullptr, 0));
 
   if (response == nullptr || !response->isComplete()) {
@@ -321,21 +262,18 @@ static std::string GetArangoVersion() {
     }
   } else {
     if (response->wasHttpError()) {
-      Client->setErrorMessage(GetHttpErrorMessage(response.get()), false);
+      _httpClient->setErrorMessage(getHttpErrorMessage(response.get()), false);
     }
 
-    Connection->disconnect();
+    _connection->disconnect();
   }
 
   return version;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief check if server is a coordinator of a cluster
-////////////////////////////////////////////////////////////////////////////////
-
-static bool GetArangoIsCluster() {
-  std::unique_ptr<SimpleHttpResult> response(Client->request(
+// check if server is a coordinator of a cluster
+bool ArangodumpFeature::getArangoIsCluster() {
+  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
       HttpRequest::HTTP_REQUEST_GET, "/_admin/server/role", "", 0));
 
   if (response == nullptr || !response->isComplete()) {
@@ -355,20 +293,17 @@ static bool GetArangoIsCluster() {
     }
   } else {
     if (response->wasHttpError()) {
-      Client->setErrorMessage(GetHttpErrorMessage(response.get()), false);
+      _httpClient->setErrorMessage(getHttpErrorMessage(response.get()), false);
     }
 
-    Connection->disconnect();
+    _connection->disconnect();
   }
 
   return role == "COORDINATOR";
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief start a batch
-////////////////////////////////////////////////////////////////////////////////
-
-static int StartBatch(std::string DBserver, std::string& errorMsg) {
+// start a batch
+int ArangodumpFeature::startBatch(std::string DBserver, std::string& errorMsg) {
   std::string const url = "/_api/replication/batch";
   std::string const body = "{\"ttl\":300}";
 
@@ -377,15 +312,17 @@ static int StartBatch(std::string DBserver, std::string& errorMsg) {
     urlExt = "?DBserver=" + DBserver;
   }
 
-  std::unique_ptr<SimpleHttpResult> response(Client->request(
+  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
       HttpRequest::HTTP_REQUEST_POST, url + urlExt, body.c_str(), body.size()));
 
   if (response == nullptr || !response->isComplete()) {
-    errorMsg = "got invalid response from server: " + Client->getErrorMessage();
+    errorMsg =
+        "got invalid response from server: " + _httpClient->getErrorMessage();
 
-    if (Force) {
+    if (_force) {
       return TRI_ERROR_NO_ERROR;
     }
+
     return TRI_ERROR_INTERNAL;
   }
 
@@ -410,67 +347,58 @@ static int StartBatch(std::string DBserver, std::string& errorMsg) {
   std::string const id =
       arangodb::basics::VelocyPackHelper::getStringValue(resBody, "id", "");
 
-  BatchId = StringUtils::uint64(id);
+  _batchId = StringUtils::uint64(id);
 
   return TRI_ERROR_NO_ERROR;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief prolongs a batch
-////////////////////////////////////////////////////////////////////////////////
-
-static void ExtendBatch(std::string DBserver) {
-  TRI_ASSERT(BatchId > 0);
+// prolongs a batch
+void ArangodumpFeature::extendBatch(std::string DBserver) {
+  TRI_ASSERT(_batchId > 0);
 
   std::string const url =
-      "/_api/replication/batch/" + StringUtils::itoa(BatchId);
+      "/_api/replication/batch/" + StringUtils::itoa(_batchId);
   std::string const body = "{\"ttl\":300}";
   std::string urlExt;
   if (!DBserver.empty()) {
     urlExt = "?DBserver=" + DBserver;
   }
 
-  std::unique_ptr<SimpleHttpResult> response(Client->request(
+  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
       HttpRequest::HTTP_REQUEST_PUT, url + urlExt, body.c_str(), body.size()));
 
   // ignore any return value
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief end a batch
-////////////////////////////////////////////////////////////////////////////////
-
-static void EndBatch(std::string DBserver) {
-  TRI_ASSERT(BatchId > 0);
+// end a batch
+void ArangodumpFeature::endBatch(std::string DBserver) {
+  TRI_ASSERT(_batchId > 0);
 
   std::string const url =
-      "/_api/replication/batch/" + StringUtils::itoa(BatchId);
+      "/_api/replication/batch/" + StringUtils::itoa(_batchId);
   std::string urlExt;
   if (!DBserver.empty()) {
     urlExt = "?DBserver=" + DBserver;
   }
 
-  BatchId = 0;
+  _batchId = 0;
 
-  std::unique_ptr<SimpleHttpResult> response(Client->request(
+  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
       HttpRequest::HTTP_REQUEST_DELETE, url + urlExt, nullptr, 0));
 
   // ignore any return value
 }
 
-////////////////////////////////////////////////////////////////////////////////
 /// @brief dump a single collection
-////////////////////////////////////////////////////////////////////////////////
-
-static int DumpCollection(int fd, std::string const& cid,
-                          std::string const& name, uint64_t maxTick,
-                          std::string& errorMsg) {
-  uint64_t chunkSize = ChunkSize;
+int ArangodumpFeature::dumpCollection(int fd, std::string const& cid,
+                                      std::string const& name, uint64_t maxTick,
+                                      std::string& errorMsg) {
+  uint64_t chunkSize = _chunkSize;
 
   std::string const baseUrl = "/_api/replication/dump?collection=" + cid +
                               "&ticks=false&translateIds=true&flush=false";
 
-  uint64_t fromTick = TickStart;
+  uint64_t fromTick = _tickStart;
 
   while (true) {
     std::string url = baseUrl + "&from=" + StringUtils::itoa(fromTick) +
@@ -480,26 +408,26 @@ static int DumpCollection(int fd, std::string const& cid,
       url += "&to=" + StringUtils::itoa(maxTick);
     }
 
-    if (Force) {
+    if (_force) {
       url += "&failOnUnknown=false";
     } else {
       url += "&failOnUnknown=true";
     }
 
-    Stats._totalBatches++;
+    _stats._totalBatches++;
 
     std::unique_ptr<SimpleHttpResult> response(
-        Client->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
+        _httpClient->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
 
     if (response == nullptr || !response->isComplete()) {
       errorMsg =
-          "got invalid response from server: " + Client->getErrorMessage();
+          "got invalid response from server: " + _httpClient->getErrorMessage();
 
       return TRI_ERROR_INTERNAL;
     }
 
     if (response->wasHttpError()) {
-      errorMsg = GetHttpErrorMessage(response.get());
+      errorMsg = getHttpErrorMessage(response.get());
 
       return TRI_ERROR_INTERNAL;
     }
@@ -545,7 +473,7 @@ static int DumpCollection(int fd, std::string const& cid,
       if (!TRI_WritePointer(fd, body.c_str(), body.length())) {
         res = TRI_ERROR_CANNOT_WRITE_FILE;
       } else {
-        Stats._totalWritten += (uint64_t)body.length();
+        _stats._totalWritten += (uint64_t)body.length();
       }
     }
 
@@ -558,12 +486,12 @@ static int DumpCollection(int fd, std::string const& cid,
       return res;
     }
 
-    if (chunkSize < MaxChunkSize) {
+    if (chunkSize < _maxChunkSize) {
       // adaptively increase chunksize
       chunkSize = static_cast<uint64_t>(chunkSize * 1.5);
 
-      if (chunkSize > MaxChunkSize) {
-        chunkSize = MaxChunkSize;
+      if (chunkSize > _maxChunkSize) {
+        chunkSize = _maxChunkSize;
       }
     }
   }
@@ -572,38 +500,34 @@ static int DumpCollection(int fd, std::string const& cid,
   return TRI_ERROR_INTERNAL;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief execute a WAL flush request
-////////////////////////////////////////////////////////////////////////////////
-
-static void FlushWal() {
+// execute a WAL flush request
+void ArangodumpFeature::flushWal() {
   std::string const url =
       "/_admin/wal/flush?waitForSync=true&waitForCollector=true";
 
   std::unique_ptr<SimpleHttpResult> response(
-      Client->request(HttpRequest::HTTP_REQUEST_PUT, url, nullptr, 0));
+      _httpClient->request(HttpRequest::HTTP_REQUEST_PUT, url, nullptr, 0));
 
   if (response == nullptr || !response->isComplete() ||
       response->wasHttpError()) {
     std::cerr << "got invalid response from server: " +
-                     Client->getErrorMessage() << std::endl;
+                     _httpClient->getErrorMessage()
+              << std::endl;
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief dump data from server
-////////////////////////////////////////////////////////////////////////////////
-
-static int RunDump(std::string& errorMsg) {
+// dump data from server
+int ArangodumpFeature::runDump(std::string& dbName, std::string& errorMsg) {
   std::string const url =
       "/_api/replication/inventory?includeSystem=" +
-      std::string(IncludeSystemCollections ? "true" : "false");
+      std::string(_includeSystemCollections ? "true" : "false");
 
   std::unique_ptr<SimpleHttpResult> response(
-      Client->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
+      _httpClient->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
 
   if (response == nullptr || !response->isComplete()) {
-    errorMsg = "got invalid response from server: " + Client->getErrorMessage();
+    errorMsg =
+        "got invalid response from server: " + _httpClient->getErrorMessage();
 
     return TRI_ERROR_INTERNAL;
   }
@@ -615,7 +539,7 @@ static int RunDump(std::string& errorMsg) {
     return TRI_ERROR_INTERNAL;
   }
 
-  FlushWal();
+  flushWal();
   std::shared_ptr<VPackBuilder> parsedBody;
   try {
     parsedBody = response->getBodyVelocyPack();
@@ -654,19 +578,19 @@ static int RunDump(std::string& errorMsg) {
 
   uint64_t maxTick = StringUtils::uint64(tickString);
   // check if the user specified a max tick value
-  if (TickEnd > 0 && maxTick > TickEnd) {
-    maxTick = TickEnd;
+  if (_tickEnd > 0 && maxTick > _tickEnd) {
+    maxTick = _tickEnd;
   }
 
   try {
     VPackBuilder meta;
     meta.openObject();
-    meta.add("database", VPackValue(client->databaseName()));
+    meta.add("database", VPackValue(dbName));
     meta.add("lastTickAtDumpStart", VPackValue(tickString));
 
     // save last tick in file
     std::string fileName =
-        OutputDirectory + TRI_DIR_SEPARATOR_STR + "dump.json";
+        _outputDirectory + TRI_DIR_SEPARATOR_STR + "dump.json";
 
     int fd;
 
@@ -702,8 +626,8 @@ static int RunDump(std::string& errorMsg) {
 
   // create a lookup table for collections
   std::map<std::string, bool> restrictList;
-  for (size_t i = 0; i < Collections.size(); ++i) {
-    restrictList.insert(std::pair<std::string, bool>(Collections[i], true));
+  for (size_t i = 0; i < _collections.size(); ++i) {
+    restrictList.insert(std::pair<std::string, bool>(_collections[i], true));
   }
 
   // iterate over collections
@@ -742,7 +666,7 @@ static int RunDump(std::string& errorMsg) {
       continue;
     }
 
-    if (name[0] == '_' && !IncludeSystemCollections) {
+    if (name[0] == '_' && !_includeSystemCollections) {
       continue;
     }
 
@@ -755,17 +679,17 @@ static int RunDump(std::string& errorMsg) {
     std::string const hexString(arangodb::rest::SslInterface::sslMD5(name));
 
     // found a collection!
-    if (Progress) {
+    if (_progress) {
       std::cout << "# Dumping " << collectionType << " collection '" << name
                 << "'..." << std::endl;
     }
 
     // now save the collection meta data and/or the actual data
-    Stats._totalCollections++;
+    _stats._totalCollections++;
 
     {
       // save meta data
-      std::string fileName = OutputDirectory + TRI_DIR_SEPARATOR_STR + name +
+      std::string fileName = _outputDirectory + TRI_DIR_SEPARATOR_STR + name +
                              "_" + hexString + ".structure.json";
 
       int fd;
@@ -798,10 +722,10 @@ static int RunDump(std::string& errorMsg) {
       TRI_CLOSE(fd);
     }
 
-    if (DumpData) {
+    if (_dumpData) {
       // save the actual data
       std::string fileName;
-      fileName = OutputDirectory + TRI_DIR_SEPARATOR_STR + name + "_" +
+      fileName = _outputDirectory + TRI_DIR_SEPARATOR_STR + name + "_" +
                  hexString + ".data.json";
 
       int fd;
@@ -821,8 +745,8 @@ static int RunDump(std::string& errorMsg) {
         return TRI_ERROR_CANNOT_WRITE_FILE;
       }
 
-      ExtendBatch("");
-      int res = DumpCollection(fd, cid, name, maxTick, errorMsg);
+      extendBatch("");
+      int res = dumpCollection(fd, cid, name, maxTick, errorMsg);
 
       TRI_CLOSE(fd);
 
@@ -839,41 +763,39 @@ static int RunDump(std::string& errorMsg) {
   return TRI_ERROR_NO_ERROR;
 }
 
-////////////////////////////////////////////////////////////////////////////////
 /// @brief dump a single shard, that is a collection on a DBserver
-////////////////////////////////////////////////////////////////////////////////
-
-static int DumpShard(int fd, std::string const& DBserver,
-                     std::string const& name, std::string& errorMsg) {
+int ArangodumpFeature::dumpShard(int fd, std::string const& DBserver,
+                                 std::string const& name,
+                                 std::string& errorMsg) {
   std::string const baseUrl = "/_api/replication/dump?DBserver=" + DBserver +
                               "&collection=" + name + "&chunkSize=" +
-                              StringUtils::itoa(ChunkSize) +
+                              StringUtils::itoa(_chunkSize) +
                               "&ticks=false&translateIds=true";
 
   uint64_t fromTick = 0;
   uint64_t maxTick = UINT64_MAX;
 
-  while (1) {
+  while (true) {
     std::string url = baseUrl + "&from=" + StringUtils::itoa(fromTick);
 
     if (maxTick > 0) {
       url += "&to=" + StringUtils::itoa(maxTick);
     }
 
-    Stats._totalBatches++;
+    _stats._totalBatches++;
 
     std::unique_ptr<SimpleHttpResult> response(
-        Client->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
+        _httpClient->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
 
     if (response == nullptr || !response->isComplete()) {
       errorMsg =
-          "got invalid response from server: " + Client->getErrorMessage();
+          "got invalid response from server: " + _httpClient->getErrorMessage();
 
       return TRI_ERROR_INTERNAL;
     }
 
     if (response->wasHttpError()) {
-      errorMsg = GetHttpErrorMessage(response.get());
+      errorMsg = getHttpErrorMessage(response.get());
 
       return TRI_ERROR_INTERNAL;
     }
@@ -919,7 +841,7 @@ static int DumpShard(int fd, std::string const& DBserver,
       if (!TRI_WritePointer(fd, body.c_str(), body.length())) {
         res = TRI_ERROR_CANNOT_WRITE_FILE;
       } else {
-        Stats._totalWritten += (uint64_t)body.length();
+        _stats._totalWritten += (uint64_t)body.length();
       }
     }
 
@@ -937,22 +859,20 @@ static int DumpShard(int fd, std::string const& DBserver,
   return TRI_ERROR_INTERNAL;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief dump data from cluster via a coordinator
-////////////////////////////////////////////////////////////////////////////////
-
-static int RunClusterDump(std::string& errorMsg) {
+// dump data from cluster via a coordinator
+int ArangodumpFeature::RunClusterDump(std::string& errorMsg) {
   int res;
 
   std::string const url =
       "/_api/replication/clusterInventory?includeSystem=" +
-      std::string(IncludeSystemCollections ? "true" : "false");
+      std::string(_includeSystemCollections ? "true" : "false");
 
   std::unique_ptr<SimpleHttpResult> response(
-      Client->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
+      _httpClient->request(HttpRequest::HTTP_REQUEST_GET, url, nullptr, 0));
 
   if (response == nullptr || !response->isComplete()) {
-    errorMsg = "got invalid response from server: " + Client->getErrorMessage();
+    errorMsg =
+        "got invalid response from server: " + _httpClient->getErrorMessage();
 
     return TRI_ERROR_INTERNAL;
   }
@@ -991,8 +911,8 @@ static int RunClusterDump(std::string& errorMsg) {
 
   // create a lookup table for collections
   std::map<std::string, bool> restrictList;
-  for (size_t i = 0; i < Collections.size(); ++i) {
-    restrictList.insert(std::pair<std::string, bool>(Collections[i], true));
+  for (size_t i = 0; i < _collections.size(); ++i) {
+    restrictList.insert(std::pair<std::string, bool>(_collections[i], true));
   }
 
   // iterate over collections
@@ -1027,7 +947,7 @@ static int RunClusterDump(std::string& errorMsg) {
       continue;
     }
 
-    if (name[0] == '_' && !IncludeSystemCollections) {
+    if (name[0] == '_' && !_includeSystemCollections) {
       continue;
     }
 
@@ -1038,17 +958,17 @@ static int RunClusterDump(std::string& errorMsg) {
     }
 
     // found a collection!
-    if (Progress) {
+    if (_progress) {
       std::cout << "# Dumping collection '" << name << "'..." << std::endl;
     }
 
     // now save the collection meta data and/or the actual data
-    Stats._totalCollections++;
+    _stats._totalCollections++;
 
     {
       // save meta data
       std::string fileName =
-          OutputDirectory + TRI_DIR_SEPARATOR_STR + name + ".structure.json";
+          _outputDirectory + TRI_DIR_SEPARATOR_STR + name + ".structure.json";
 
       // remove an existing file first
       if (TRI_ExistsFile(fileName.c_str())) {
@@ -1078,12 +998,12 @@ static int RunClusterDump(std::string& errorMsg) {
       TRI_CLOSE(fd);
     }
 
-    if (DumpData) {
+    if (_dumpData) {
       // save the actual data
 
       // Now set up the output file:
       std::string const hexString(arangodb::rest::SslInterface::sslMD5(name));
-      std::string fileName = OutputDirectory + TRI_DIR_SEPARATOR_STR + name +
+      std::string fileName = _outputDirectory + TRI_DIR_SEPARATOR_STR + name +
                              "_" + hexString + ".data.json";
 
       // remove an existing file first
@@ -1110,7 +1030,8 @@ static int RunClusterDump(std::string& errorMsg) {
 
         std::string shardName = it.key.copyString();
 
-        if (! it.value.isArray() || it.value.length() == 0 || !it.value[0].isString()) {
+        if (!it.value.isArray() || it.value.length() == 0 ||
+            !it.value[0].isString()) {
           TRI_CLOSE(fd);
           errorMsg = "unexpected value for 'shards' attribute";
 
@@ -1119,21 +1040,21 @@ static int RunClusterDump(std::string& errorMsg) {
 
         std::string DBserver = it.value[0].copyString();
 
-        if (Progress) {
+        if (_progress) {
           std::cout << "# Dumping shard '" << shardName << "' from DBserver '"
                     << DBserver << "' ..." << std::endl;
         }
-        res = StartBatch(DBserver, errorMsg);
+        res = startBatch(DBserver, errorMsg);
         if (res != TRI_ERROR_NO_ERROR) {
           TRI_CLOSE(fd);
           return res;
         }
-        res = DumpShard(fd, DBserver, shardName, errorMsg);
+        res = dumpShard(fd, DBserver, shardName, errorMsg);
         if (res != TRI_ERROR_NO_ERROR) {
           TRI_CLOSE(fd);
           return res;
         }
-        EndBatch(DBserver);
+        endBatch(DBserver);
       }
 
       res = TRI_CLOSE(fd);
@@ -1151,146 +1072,63 @@ static int RunClusterDump(std::string& errorMsg) {
   return TRI_ERROR_NO_ERROR;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief request location rewriter (injects database name)
-////////////////////////////////////////////////////////////////////////////////
-
 static std::string rewriteLocation(void* data, std::string const& location) {
+  std::string* dbName = (std::string*)data;
+
   if (location.substr(0, 5) == "/_db/") {
-    // location already contains /_db/
     return location;
   }
 
   if (location[0] == '/') {
-    return "/_db/" + BaseClient.databaseName() + location;
+    return "/_db/" + (*dbName) + location;
   } else {
-    return "/_db/" + BaseClient.databaseName() + "/" + location;
+    return "/_db/" + (*dbName) + "/" + location;
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief main
-////////////////////////////////////////////////////////////////////////////////
+void ArangodumpFeature::start() {
+  ClientFeature* client =
+      dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
 
-int main(int argc, char* argv[]) {
   int ret = EXIT_SUCCESS;
 
-  LocalEntryFunction();
+  *_result = ret;
 
-  TRIAGENS_REST_INITIALIZE(argc, argv);
+  client->createEndpointServer();
 
-  Logger::initialize(false);
-
-  // .............................................................................
-  // set defaults
-  // .............................................................................
-
-  int err = 0;
-  OutputDirectory = FileUtils::currentDirectory(&err)
-                        .append(TRI_DIR_SEPARATOR_STR)
-                        .append("dump");
-  BaseClient.setEndpointString(Endpoint::getDefaultEndpoint());
-
-  // .............................................................................
-  // parse the program options
-  // .............................................................................
-
-  ParseProgramOptions(argc, argv);
-
-  // use a minimum value for batches
-  if (ChunkSize < 1024 * 128) {
-    ChunkSize = 1024 * 128;
-  }
-  if (MaxChunkSize < ChunkSize) {
-    MaxChunkSize = ChunkSize;
+  if (client->endpointServer() == nullptr) {
+    LOG(FATAL) << "invalid value for --server.endpoint ('" << client->endpoint()
+               << "')";
+    FATAL_ERROR_EXIT();
   }
 
-  if (TickStart < TickEnd) {
-    std::cerr << "Error: invalid values for --tick-start or --tick-end"
-              << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
+  _connection = GeneralClientConnection::factory(
+      client->endpointServer(), client->requestTimeout(),
+      client->connectionTimeout(), ClientFeature::DEFAULT_RETRIES,
+      client->sslProtocol());
+
+  if (_connection == nullptr) {
+    LOG(FATAL) << "out of memory";
+    FATAL_ERROR_EXIT();
   }
 
-  if (!OutputDirectory.empty() &&
-      OutputDirectory.back() == TRI_DIR_SEPARATOR_CHAR) {
-    // trim trailing slash from path because it may cause problems on ...
-    // Windows
-    TRI_ASSERT(OutputDirectory.size() > 0);
-    OutputDirectory.pop_back();
-  }
+  _httpClient =
+      new SimpleHttpClient(_connection, client->requestTimeout(), false);
 
-  // .............................................................................
-  // create output directory
-  // .............................................................................
+  std::string dbName = client->databaseName();
 
-  bool isDirectory = false;
-  bool isEmptyDirectory = false;
+  _httpClient->setLocationRewriter((void*)&dbName, rewriteLocation);
+  _httpClient->setUserNamePassword("/", client->username(), client->password());
 
-  if (!OutputDirectory.empty()) {
-    isDirectory = TRI_IsDirectory(OutputDirectory.c_str());
+  std::string const versionString = getArangoVersion();
 
-    if (isDirectory) {
-      TRI_vector_string_t files =
-          TRI_FullTreeDirectory(OutputDirectory.c_str());
-      // we don't care if the target directory is empty
-      isEmptyDirectory = (files._length == 0);
-      TRI_DestroyVectorString(&files);
-    }
-  }
+  if (!_connection->isConnected()) {
+    LOG(ERR) << "Could not connect to endpoint '" << client->endpoint()
+             << "', database: '" << dbName << "', username: '"
+             << client->username() << "'";
+    LOG(FATAL) << "Error message: '" << _httpClient->getErrorMessage() << "'";
 
-  if (OutputDirectory.empty() ||
-      (TRI_ExistsFile(OutputDirectory.c_str()) && !isDirectory)) {
-    std::cerr << "Error: cannot write to output directory '" << OutputDirectory
-              << "'" << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
-  }
-
-  if (isDirectory && !isEmptyDirectory && !Overwrite) {
-    std::cerr
-        << "Error: output directory '" << OutputDirectory
-        << "' already exists. use \"--overwrite true\" to overwrite data in it"
-        << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
-  }
-
-  // .............................................................................
-  // set-up client connection
-  // .............................................................................
-
-  BaseClient.createEndpoint();
-
-  if (BaseClient.endpointServer() == nullptr) {
-    std::cerr << "invalid value for --server.endpoint ('"
-              << BaseClient.endpointString() << "')" << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
-  }
-
-  Connection = GeneralClientConnection::factory(
-      BaseClient.endpointServer(), BaseClient.requestTimeout(),
-      BaseClient.connectTimeout(), ArangoClient::DEFAULT_RETRIES,
-      BaseClient.sslProtocol());
-
-  if (Connection == nullptr) {
-    std::cerr << "out of memory" << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
-  }
-
-  Client = new SimpleHttpClient(Connection, BaseClient.requestTimeout(), false);
-
-  Client->setLocationRewriter(0, &rewriteLocation);
-  Client->setUserNamePassword("/", BaseClient.username(),
-                              BaseClient.password());
-
-  std::string const versionString = GetArangoVersion();
-
-  if (!Connection->isConnected()) {
-    std::cerr << "Could not connect to endpoint '"
-              << BaseClient.endpointString() << "', database: '"
-              << BaseClient.databaseName() << "', username: '"
-              << BaseClient.username() << "'" << std::endl;
-    std::cerr << "Error message: '" << Client->getErrorMessage() << "'"
-              << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
+    FATAL_ERROR_EXIT();
   }
 
   // successfully connected
@@ -1301,120 +1139,106 @@ int main(int argc, char* argv[]) {
   int minor = 0;
 
   if (sscanf(versionString.c_str(), "%d.%d", &major, &minor) != 2) {
-    std::cerr << "Error: invalid server version '" << versionString << "'"
-              << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
+    LOG(FATAL) << "invalid server version '" << versionString << "'";
+    FATAL_ERROR_EXIT();
   }
 
   if (major != 3) {
     // we can connect to 3.x
-    std::cerr << "Error: got incompatible server version '" << versionString
-              << "'" << std::endl;
-    if (!Force) {
-      TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
+    LOG(ERR) << "Error: got incompatible server version '" << versionString
+             << "'";
+
+    if (!_force) {
+      FATAL_ERROR_EXIT();
     }
   }
 
   if (major >= 2) {
     // Version 1.4 did not yet have a cluster mode
-    clusterMode = GetArangoIsCluster();
-    if (clusterMode) {
-      if (TickStart != 0 || TickEnd != 0) {
-        std::cerr << "Error: cannot use tick-start or tick-end on a cluster"
-                  << std::endl;
-        TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
+    _clusterMode = getArangoIsCluster();
+
+    if (_clusterMode) {
+      if (_tickStart != 0 || _tickEnd != 0) {
+        LOG(ERR) << "Error: cannot use tick-start or tick-end on a cluster";
+        FATAL_ERROR_EXIT();
       }
     }
   }
 
-  if (!Connection->isConnected()) {
-    std::cerr << "Lost connection to endpoint '" << BaseClient.endpointString()
-              << "', database: '" << BaseClient.databaseName()
-              << "', username: '" << BaseClient.username() << "'" << std::endl;
-    std::cerr << "Error message: '" << Client->getErrorMessage() << "'"
-              << std::endl;
-    TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
+  if (!_connection->isConnected()) {
+    LOG(ERR) << "Lost connection to endpoint '" << client->endpoint()
+             << "', database: '" << dbName << "', username: '"
+             << client->username() << "'";
+    LOG(FATAL) << "Error message: '" << _httpClient->getErrorMessage() << "'";
+    FATAL_ERROR_EXIT();
   }
 
-  if (!isDirectory) {
-    long systemError;
-    std::string errorMessage;
-    int res =
-        TRI_CreateDirectory(OutputDirectory.c_str(), systemError, errorMessage);
+  if (_progress) {
+    std::cout << "Connected to ArangoDB '" << client->endpoint()
+              << "', database: '" << dbName << "', username: '"
+              << client->username() << "'" << std::endl;
 
-    if (res != TRI_ERROR_NO_ERROR) {
-      std::cerr << "Error: unable to create output directory '"
-                << OutputDirectory << "': " << errorMessage << std::endl;
-      TRI_EXIT_FUNCTION(EXIT_FAILURE, nullptr);
-    }
-  }
-
-  if (Progress) {
-    std::cout << "Connected to ArangoDB '" << BaseClient.endpointString()
-              << "', database: '" << BaseClient.databaseName()
-              << "', username: '" << BaseClient.username() << "'" << std::endl;
-
-    std::cout << "Writing dump to output directory '" << OutputDirectory << "'"
+    std::cout << "Writing dump to output directory '" << _outputDirectory << "'"
               << std::endl;
   }
 
-  memset(&Stats, 0, sizeof(Stats));
+  memset(&_stats, 0, sizeof(_stats));
 
   std::string errorMsg = "";
 
   int res;
 
   try {
-    if (!clusterMode) {
-      res = StartBatch("", errorMsg);
-      if (res != TRI_ERROR_NO_ERROR && Force) {
+    if (!_clusterMode) {
+      res = startBatch("", errorMsg);
+
+      if (res != TRI_ERROR_NO_ERROR && _force) {
         res = TRI_ERROR_NO_ERROR;
       }
 
       if (res == TRI_ERROR_NO_ERROR) {
-        res = RunDump(errorMsg);
+        res = runDump(dbName, errorMsg);
       }
 
-      if (BatchId > 0) {
-        EndBatch("");
+      if (_batchId > 0) {
+        endBatch("");
       }
-    } else {  // clusterMode == true
+    } else {
       res = RunClusterDump(errorMsg);
     }
   } catch (std::exception const& ex) {
-    std::cerr << "Error: caught exception " << ex.what() << std::endl;
+    LOG(ERR) << "caught exception " << ex.what();
     res = TRI_ERROR_INTERNAL;
   } catch (...) {
-    std::cerr << "Error: caught unknown exception" << std::endl;
+    LOG(ERR) << "Error: caught unknown exception";
     res = TRI_ERROR_INTERNAL;
   }
 
   if (res != TRI_ERROR_NO_ERROR) {
     if (!errorMsg.empty()) {
-      std::cerr << "Error: " << errorMsg << std::endl;
+      LOG(ERR) << errorMsg;
     } else {
-      std::cerr << "An error occurred" << std::endl;
+      LOG(ERR) << "An error occurred";
     }
     ret = EXIT_FAILURE;
   }
 
-  if (Progress) {
-    if (DumpData) {
-      std::cout << "Processed " << Stats._totalCollections << " collection(s), "
-                << "wrote " << Stats._totalWritten
+  if (_progress) {
+    if (_dumpData) {
+      std::cout << "Processed " << _stats._totalCollections
+                << " collection(s), "
+                << "wrote " << _stats._totalWritten
                 << " byte(s) into datafiles, "
-                << "sent " << Stats._totalBatches << " batch(es)" << std::endl;
+                << "sent " << _stats._totalBatches << " batch(es)" << std::endl;
     } else {
-      std::cout << "Processed " << Stats._totalCollections << " collection(s)"
+      std::cout << "Processed " << _stats._totalCollections << " collection(s)"
                 << std::endl;
     }
   }
 
-  delete Client;
+  delete _httpClient;
 
-  TRIAGENS_REST_SHUTDOWN;
+  *_result = ret;
 
-  LocalExitFunction(ret, nullptr);
-
-  return ret;
+  server()->beginShutdown();
 }

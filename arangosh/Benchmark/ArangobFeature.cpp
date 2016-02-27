@@ -17,7 +17,7 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Dr. Frank Celler
+/// @author Jan Steemann
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "ArangobFeature.h"
@@ -133,10 +133,10 @@ void ArangobFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
 
   options->addOption("--verbose",
                      "print out replies if the http-header indicates db-errors",
-                     new BooleanParameter(&_verbose));
+                     new BooleanParameter(&_verbose, false));
 
   options->addOption("--quiet", "supress status messages",
-                     new BooleanParameter(&_quiet));
+                     new BooleanParameter(&_quiet, false));
 }
 
 void ArangobFeature::status(std::string const& value) {

@@ -59,8 +59,8 @@ endif ()
 add_executable(${BIN_ARANGODUMP}
   ${ProductVersionFiles_arangodump}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
-  ArangoShell/ArangoClient.cpp
-  V8Client/arangodump.cpp
+  Dump/ArangodumpFeature.cpp
+  Dump/arangodump.cpp
 )
 
 target_link_libraries(${BIN_ARANGODUMP}
