@@ -63,8 +63,6 @@ ArangodumpFeature::ArangodumpFeature(
       _tickStart(0),
       _tickEnd(0),
       _result(result),
-      _connection(nullptr),
-      _httpClient(nullptr),
       _batchId(0),
       _clusterMode(false) {
   requiresElevatedPrivileges(false);
@@ -202,106 +200,6 @@ void ArangodumpFeature::prepare() {
                          .append("dump");
 }
 
-// extract an error message from a response
-std::string ArangodumpFeature::getHttpErrorMessage(SimpleHttpResult* result) {
-  std::string details;
-  try {
-    std::shared_ptr<VPackBuilder> parsedBody = result->getBodyVelocyPack();
-    VPackSlice const body = parsedBody->slice();
-
-    std::string const& errorMessage =
-        arangodb::basics::VelocyPackHelper::getStringValue(body, "errorMessage",
-                                                           "");
-    int errorNum = arangodb::basics::VelocyPackHelper::getNumericValue<int>(
-        body, "errorNum", 0);
-
-    if (errorMessage != "" && errorNum > 0) {
-      details =
-          ": ArangoError " + StringUtils::itoa(errorNum) + ": " + errorMessage;
-    }
-  } catch (...) {
-    // No action, fallthrough for error
-  }
-  return "got error from server: HTTP " +
-         StringUtils::itoa(result->getHttpReturnCode()) + " (" +
-         result->getHttpReturnMessage() + ")" + details;
-}
-
-// fetch the version from the server
-std::string ArangodumpFeature::getArangoVersion() {
-  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
-      HttpRequest::HTTP_REQUEST_GET, "/_api/version", nullptr, 0));
-
-  if (response == nullptr || !response->isComplete()) {
-    return "";
-  }
-
-  std::string version;
-
-  if (response->getHttpReturnCode() == HttpResponse::OK) {
-    // default value
-    version = "arango";
-    try {
-      std::shared_ptr<VPackBuilder> parsedBody = response->getBodyVelocyPack();
-      VPackSlice const body = parsedBody->slice();
-
-      // look up "server" value
-      std::string const server =
-          arangodb::basics::VelocyPackHelper::getStringValue(body, "server",
-                                                             "");
-
-      // "server" value is a string and content is "arango"
-      if (server == "arango") {
-        // look up "version" value
-        version = arangodb::basics::VelocyPackHelper::getStringValue(
-            body, "version", "");
-      }
-
-    } catch (...) {
-      // No Action
-    }
-  } else {
-    if (response->wasHttpError()) {
-      _httpClient->setErrorMessage(getHttpErrorMessage(response.get()), false);
-    }
-
-    _connection->disconnect();
-  }
-
-  return version;
-}
-
-// check if server is a coordinator of a cluster
-bool ArangodumpFeature::getArangoIsCluster() {
-  std::unique_ptr<SimpleHttpResult> response(_httpClient->request(
-      HttpRequest::HTTP_REQUEST_GET, "/_admin/server/role", "", 0));
-
-  if (response == nullptr || !response->isComplete()) {
-    return false;
-  }
-
-  std::string role = "UNDEFINED";
-
-  if (response->getHttpReturnCode() == HttpResponse::OK) {
-    try {
-      std::shared_ptr<VPackBuilder> parsedBody = response->getBodyVelocyPack();
-      VPackSlice const body = parsedBody->slice();
-      role = arangodb::basics::VelocyPackHelper::getStringValue(body, "role",
-                                                                "UNDEFINED");
-    } catch (...) {
-      // No Action
-    }
-  } else {
-    if (response->wasHttpError()) {
-      _httpClient->setErrorMessage(getHttpErrorMessage(response.get()), false);
-    }
-
-    _connection->disconnect();
-  }
-
-  return role == "COORDINATOR";
-}
-
 // start a batch
 int ArangodumpFeature::startBatch(std::string DBserver, std::string& errorMsg) {
   std::string const url = "/_api/replication/batch";
@@ -427,7 +325,7 @@ int ArangodumpFeature::dumpCollection(int fd, std::string const& cid,
     }
 
     if (response->wasHttpError()) {
-      errorMsg = getHttpErrorMessage(response.get());
+      errorMsg = getHttpErrorMessage(response.get(), nullptr);
 
       return TRI_ERROR_INTERNAL;
     }
@@ -795,7 +693,7 @@ int ArangodumpFeature::dumpShard(int fd, std::string const& DBserver,
     }
 
     if (response->wasHttpError()) {
-      errorMsg = getHttpErrorMessage(response.get());
+      errorMsg = getHttpErrorMessage(response.get(), nullptr);
 
       return TRI_ERROR_INTERNAL;
     }
@@ -860,7 +758,7 @@ int ArangodumpFeature::dumpShard(int fd, std::string const& DBserver,
 }
 
 // dump data from cluster via a coordinator
-int ArangodumpFeature::RunClusterDump(std::string& errorMsg) {
+int ArangodumpFeature::runClusterDump(std::string& errorMsg) {
   int res;
 
   std::string const url =
@@ -1072,20 +970,6 @@ int ArangodumpFeature::RunClusterDump(std::string& errorMsg) {
   return TRI_ERROR_NO_ERROR;
 }
 
-static std::string rewriteLocation(void* data, std::string const& location) {
-  std::string* dbName = (std::string*)data;
-
-  if (location.substr(0, 5) == "/_db/") {
-    return location;
-  }
-
-  if (location[0] == '/') {
-    return "/_db/" + (*dbName) + location;
-  } else {
-    return "/_db/" + (*dbName) + "/" + location;
-  }
-}
-
 void ArangodumpFeature::start() {
   ClientFeature* client =
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
@@ -1117,10 +1001,10 @@ void ArangodumpFeature::start() {
 
   std::string dbName = client->databaseName();
 
-  _httpClient->setLocationRewriter((void*)&dbName, rewriteLocation);
+  _httpClient->setLocationRewriter((void*)&dbName, &rewriteLocation);
   _httpClient->setUserNamePassword("/", client->username(), client->password());
 
-  std::string const versionString = getArangoVersion();
+  std::string const versionString = getArangoVersion(nullptr);
 
   if (!_connection->isConnected()) {
     LOG(ERR) << "Could not connect to endpoint '" << client->endpoint()
@@ -1155,7 +1039,7 @@ void ArangodumpFeature::start() {
 
   if (major >= 2) {
     // Version 1.4 did not yet have a cluster mode
-    _clusterMode = getArangoIsCluster();
+    _clusterMode = getArangoIsCluster(nullptr);
 
     if (_clusterMode) {
       if (_tickStart != 0 || _tickEnd != 0) {
@@ -1204,7 +1088,7 @@ void ArangodumpFeature::start() {
         endBatch("");
       }
     } else {
-      res = RunClusterDump(errorMsg);
+      res = runClusterDump(errorMsg);
     }
   } catch (std::exception const& ex) {
     LOG(ERR) << "caught exception " << ex.what();
@@ -1239,4 +1123,8 @@ void ArangodumpFeature::start() {
   *_result = ret;
 }
 
-void ArangodumpFeature::stop() { delete _httpClient; }
+void ArangodumpFeature::stop() {
+  if (_httpClient != nullptr) {
+    delete _httpClient;
+  }
+}

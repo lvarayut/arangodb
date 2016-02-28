@@ -61,6 +61,7 @@ add_executable(${BIN_ARANGODUMP}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
   Dump/ArangodumpFeature.cpp
   Dump/arangodump.cpp
+  V8Client/ArangoClientHelper.cpp
 )
 
 target_link_libraries(${BIN_ARANGODUMP}
@@ -98,7 +99,9 @@ add_executable(${BIN_ARANGOIMP}
   Import/ArangoimpFeature.cpp
   Import/ImportHelper.cpp
   Import/arangoimp.cpp
+  V8Client/ArangoClientHelper.cpp
 )
+
 target_link_libraries(${BIN_ARANGOIMP}
   ${LIB_ARANGO}
   ${LINENOISE_LIBS}
@@ -131,8 +134,9 @@ endif ()
 add_executable(${BIN_ARANGORESTORE}
   ${ProductVersionFiles_arangorestore}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
-  ArangoShell/ArangoClient.cpp
-  V8Client/arangorestore.cpp
+  Restore/ArangorestoreFeature.cpp
+  Restore/arangorestore.cpp
+  V8Client/ArangoClientHelper.cpp
 )
 
 target_link_libraries(${BIN_ARANGORESTORE}

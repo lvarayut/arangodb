@@ -160,7 +160,7 @@ void ArangobFeature::start() {
   *_result = ret;
   ARANGOB = this;
 
-  std::unique_ptr<BenchmarkOperation> benchmark = GetTestCase(_testCase);
+  std::unique_ptr<BenchmarkOperation> benchmark(GetTestCase(_testCase));
 
   if (benchmark == nullptr) {
     ARANGOB = nullptr;
@@ -206,8 +206,8 @@ void ArangobFeature::start() {
     endpoints.push_back(endpoint);
 
     BenchmarkThread* thread = new BenchmarkThread(
-        benchmark, &startCondition, &ArangobFeature::updateStartCounter, i,
-        (unsigned long)_batchSize, &operationsCounter, endpoint,
+        benchmark.get(), &startCondition, &ArangobFeature::updateStartCounter,
+        i, (unsigned long)_batchSize, &operationsCounter, endpoint,
         client->databaseName(), client->username(), client->password(),
         client->requestTimeout(), client->connectionTimeout(),
         client->sslProtocol(), _keepAlive, _async, _verbose);
@@ -306,7 +306,7 @@ void ArangobFeature::start() {
   }
   if (incomplete > 0) {
     LOG(WARN) << "WARNING: " << incomplete
-              << " arangob requests with incomplete results!"
+              << " arangob requests with incomplete results!";
   }
 
   benchmark->tearDown();
@@ -324,6 +324,4 @@ void ArangobFeature::start() {
   *_result = ret;
 }
 
-void ArangobFeature::start() {
-  ARANGOB = nullptr;
-}
+void ArangobFeature::stop() { ARANGOB = nullptr; }

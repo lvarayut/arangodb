@@ -33,6 +33,7 @@ class ArangobFeature final : public application_features::ApplicationFeature {
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
   void start() override;
+  void stop() override;
 
  public:
   bool async() const { return _async; }

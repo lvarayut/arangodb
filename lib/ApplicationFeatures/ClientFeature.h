@@ -44,7 +44,8 @@ class ClientFeature final : public application_features::ApplicationFeature {
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
-  void validateOptions(std::shared_ptr<options::ProgramOptions> options) override;
+  void validateOptions(
+      std::shared_ptr<options::ProgramOptions> options) override;
 
  public:
   std::string const& databaseName() const { return _databaseName; }
@@ -60,6 +61,9 @@ class ClientFeature final : public application_features::ApplicationFeature {
   void createEndpointServer();
   void createEndpointServer(std::string const& endpoint);
   rest::Endpoint* endpointServer() { return _endpointServer; }
+  void setDatabaseName(std::string const& databaseName) {
+    _databaseName = databaseName;
+  }
 
  private:
   std::string _databaseName;

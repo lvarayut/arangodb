@@ -142,20 +142,6 @@ void ArangoimpFeature::validateOptions(
   }
 }
 
-static std::string rewriteLocation(void* data, std::string const& location) {
-  std::string* dbName = (std::string*)data;
-
-  if (location.substr(0, 5) == "/_db/") {
-    return location;
-  }
-
-  if (location[0] == '/') {
-    return "/_db/" + (*dbName) + location;
-  } else {
-    return "/_db/" + (*dbName) + "/" + location;
-  }
-}
-
 void ArangoimpFeature::start() {
   ClientFeature* client =
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));

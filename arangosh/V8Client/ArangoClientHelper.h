@@ -20,11 +20,10 @@
 /// @author Jan Steemann
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_ARANGOIMP_FEATURE_H
-#define APPLICATION_FEATURES_ARANGOIMP_FEATURE_H 1
+#ifndef APPLICATION_FEATURES_ARANGO_CLIENT_HELPER_H
+#define APPLICATION_FEATURES_ARANGO_CLIENT_HELPER_H 1
 
-#include "ApplicationFeatures/ApplicationFeature.h"
-#include "V8Client/ArangoClientHelper.h"
+#include "Basics/Common.h"
 
 namespace arangodb {
 namespace httpclient {
@@ -33,34 +32,24 @@ class SimpleHttpClient;
 class SimpleHttpResult;
 }
 
-class ArangoimpFeature final : public application_features::ApplicationFeature,
-                               public ArangoClientHelper {
+class ArangoClientHelper {
  public:
-  ArangoimpFeature(application_features::ApplicationServer* server,
-                   int* result);
+  ArangoClientHelper();
 
  public:
-  void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
-  void validateOptions(
-      std::shared_ptr<options::ProgramOptions> options) override;
-  void start() override;
+  static std::string rewriteLocation(void* data, std::string const& location);
 
- private:
-  std::string _filename;
-  bool _useBackslash;
-  uint64_t _chunkSize;
-  std::string _collectionName;
-  bool _createCollection;
-  std::string _createCollectionType;
-  std::string _typeImport;
-  bool _overwrite;
-  std::string _quote;
-  std::string _separator;
-  bool _progress;
-  std::string _onDuplicateAction;
+ public:
+  std::string getHttpErrorMessage(httpclient::SimpleHttpResult*, int* err);
+  std::string getArangoVersion(int* err);
+  bool getArangoIsCluster(int* err);
 
- private:
-  int* _result;
+ protected:
+  // HTTP client
+  httpclient::SimpleHttpClient* _httpClient;
+
+  // the initial default connection
+  httpclient::GeneralClientConnection* _connection;
 };
 }
 
