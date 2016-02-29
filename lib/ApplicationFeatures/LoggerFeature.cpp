@@ -33,9 +33,9 @@ LoggerFeature::LoggerFeature(application_features::ApplicationServer* server)
     : ApplicationFeature(server, "LoggerFeature"),
       _output(),
       _level(),
+      _useLocalTime(false),
       _prefix(""),
       _file(),
-      _useLocalTime(false),
       _lineNumber(false),
       _thread(false) {
   _level.push_back("info");
