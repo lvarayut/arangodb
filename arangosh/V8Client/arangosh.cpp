@@ -51,7 +51,7 @@
 #include "V8/v8-conv.h"
 #include "V8/v8-shell.h"
 #include "V8/v8-utils.h"
-#include "V8Client/ImportHelper.h"
+#include "Import/ImportHelper.h"
 #include "V8Client/V8ClientConnection.h"
 
 #include "3rdParty/valgrind/valgrind.h"
