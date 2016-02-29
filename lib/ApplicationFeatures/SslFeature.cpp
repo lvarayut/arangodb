@@ -24,7 +24,7 @@
 
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
-#include "basics/ssl-helper.h"
+#include "Basics/ssl-helper.h"
 
 using namespace arangodb;
 using namespace arangodb::options;
