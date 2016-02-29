@@ -17,45 +17,35 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Dr. Frank Celler
+/// @author Jan Steemann
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_CONSOLE_FEATURE_H
-#define APPLICATION_FEATURES_CONSOLE_FEATURE_H 1
+#ifndef APPLICATION_FEATURES_ARANGOSH_FEATURE_H
+#define APPLICATION_FEATURES_ARANGOSH_FEATURE_H 1
 
 #include "ApplicationFeatures/ApplicationFeature.h"
+#include "V8Client/ArangoClientHelper.h"
 
 namespace arangodb {
-class ConsoleFeature final : public application_features::ApplicationFeature {
+class ArangoshFeature final : public application_features::ApplicationFeature,
+                              public ArangoClientHelper {
  public:
-  explicit ConsoleFeature(application_features::ApplicationServer* server);
+  ArangoshFeature(application_features::ApplicationServer* server, int* result);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
+  void validateOptions(
+      std::shared_ptr<options::ProgramOptions> options) override;
   void prepare() override;
-
- public:
-  static void printContinuous(std::string const&);
-  static void printLine(std::string const&, bool forceNewLine = false);
-  static std::string readPassword(std::string const& message);
+  void start() override;
+  void stop() override;
 
  private:
-#ifdef WIN32
-  int16_t _codePage;
-#endif
-  bool _quiet;
-  bool _colors;
-  bool _autoComplete;
-  bool _prettyPrint;
-  std::string _auditFile;
-  bool _pager;
-  std::string _pagerCommand;
-  std::string _prompt;
 
  private:
-  FILE* _toPager;
-  FILE* _toAuditFile;
-  bool _cygwinShell;
+
+ private:
+  int* _result;
 };
 }
 

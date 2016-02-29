@@ -32,13 +32,17 @@ using namespace arangodb::options;
 LoggerFeature::LoggerFeature(application_features::ApplicationServer* server)
     : ApplicationFeature(server, "LoggerFeature"),
       _output(),
-      _level(),
+      _levels(),
       _useLocalTime(false),
       _prefix(""),
       _file(),
       _lineNumber(false),
-      _thread(false) {
-  _level.push_back("info");
+      _thread(false),
+      _performance(false),
+      _daemon(false),
+      _backgrounded(false),
+      _threaded(false) {
+  _levels.push_back("info");
   setOptional(false);
   requiresElevatedPrivileges(false);
 }
@@ -50,19 +54,26 @@ void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
                      new VectorParameter<StringParameter>(&_output));
 
   options->addOption("--log.level,-l", "the global or topic-specific log level",
-                     new VectorParameter<StringParameter>(&_level));
+                     new VectorParameter<StringParameter>(&_levels));
 
   options->addOption("--log.use-local-time",
                      "use local timezone instead of UTC",
                      new BooleanParameter(&_useLocalTime));
 
+  options->addOption("--log.prefix",
+                     "prefix log message with this string",
+                     new StringParameter(&_prefix));
+
   options->addHiddenOption(
       "--log.prefix", "adds a prefix in case multiple instances are running",
       new StringParameter(&_prefix));
 
+  options->addOption("--log", "the global or topic-specific log level",
+                     new VectorParameter<StringParameter>(&_levels));
+
   options->addHiddenOption("--log.file",
                            "shortcut for '--log.output file://<filename>'",
-                           new VectorParameter<StringParameter>(&_file));
+                           new StringParameter(&_file));
 
   options->addHiddenOption("--log.line-number",
                            "append line number and file name",
@@ -70,22 +81,67 @@ void LoggerFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
 
   options->addHiddenOption("--log.thread", "append a thread identifier",
                            new BooleanParameter(&_thread));
+
+  options->addHiddenOption("--log.performance",
+                           "shortcut for '--log.level requests=trace'",
+                           new BooleanParameter(&_performance));
 }
 
 void LoggerFeature::loadOptions(std::shared_ptr<options::ProgramOptions>) {
   // for debugging purpose, we set the log levels NOW
   // this might be overwritten latter
   Logger::initialize(false);
-  Logger::setLogLevel(_level);
+  Logger::setLogLevel(_levels);
+}
+
+void LoggerFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {
+  if (options->processingResult().touched("log.file")) {
+    std::string definition;
+
+    if (_file == "+" || _file == "-") {
+      definition = _file;
+    } else if (_daemon) {
+      definition = "file://" + _file + ".daemon";
+    } else {
+      definition = "file://" + _file;
+    }
+
+    _output.push_back(definition);
+  }
+
+  if (_performance) {
+    _levels.push_back("requests=trace");
+  }
+
+  if (!_backgrounded && isatty(STDIN_FILENO) != 0) {
+    _output.push_back("*");
+  }
 }
 
 void LoggerFeature::prepare() {
-  Logger::flush();
-  Logger::shutdown(true);
-  Logger::initialize(false);
+#if _WIN32
+  if (!TRI_InitWindowsEventLog()) {
+    std::cerr << "failed to init event log" << std::endl;
+    FATAL_ERROR_EXIT();
+  }
+#endif
 
-  Logger::setLogLevel(_level);
+  Logger::setLogLevel(_levels);
   Logger::setUseLocalTime(_useLocalTime);
   Logger::setShowLineNumber(_lineNumber);
   Logger::setShowThreadIdentifier(_thread);
+  Logger::setOutputPrefix(_prefix);
+}
+
+void LoggerFeature::start() {
+  if (_threaded) {
+    Logger::flush();
+    Logger::shutdown(false);
+    Logger::initialize(_threaded);
+  }
+}
+
+void LoggerFeature::stop() {
+  Logger::flush();
+  Logger::shutdown(true);
 }

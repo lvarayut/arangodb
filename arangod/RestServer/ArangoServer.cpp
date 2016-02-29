@@ -991,29 +991,6 @@ void ArangoServer::buildApplicationServer() {
   _applicationServer->addFeature(_applicationV8);
 
   // .............................................................................
-  // MRuby engine (this has been removed from arangod in version 2.2)
-  // .............................................................................
-
-  std::string ignoreOpt;
-  std::map<std::string, ProgramOptionsDescription> additional;
-
-  additional["Hidden Options"](
-      "ruby.gc-interval", &ignoreOpt,
-      "Ruby garbage collection interval (each x requests)")(
-      "ruby.action-directory", &ignoreOpt, "path to the Ruby action directory")(
-      "ruby.modules-path", &ignoreOpt,
-      "one or more directories separated by (semi-) colons")(
-      "ruby.startup-directory", &ignoreOpt,
-      "path to the directory containing alternate Ruby startup scripts")(
-      "server.disable-replication-logger", &ignoreOpt,
-      "start with replication logger turned off")(
-      "database.force-sync-shapes", &ignoreOpt,
-      "force syncing of shape data to disk, will use waitForSync value of "
-      "collection when turned off (deprecated)")(
-      "database.remove-on-drop", &ignoreOpt,
-      "wipe a collection from disk after dropping");
-
-  // .............................................................................
   // define server options
   // .............................................................................
 
@@ -1027,10 +1004,6 @@ void ArangoServer::buildApplicationServer() {
   // .............................................................................
   // set language of default collator
   // .............................................................................
-
-  additional["Server Options:help-default"]("temp-path", &_tempPath,
-                                            "temporary path")(
-      "default-language", &_defaultLanguage, "ISO-639 language code");
 
   // other options
   additional["Hidden Options"]("no-upgrade", "skip a database upgrade")(
@@ -1051,14 +1024,6 @@ void ArangoServer::buildApplicationServer() {
       "working-directory", &_workingDirectory,
       "working directory in daemon mode");
 #endif
-
-#ifdef __APPLE__
-  additional["General Options:help-admin"]("voice",
-                                           "enable voice based welcome");
-#endif
-
-  additional["Hidden Options"]("development-mode",
-                               "start server in development mode");
 
   // .............................................................................
   // javascript options
@@ -1881,24 +1846,12 @@ int ArangoServer::runConsole(TRI_vocbase_t* vocbase) {
   ConsoleThread console(_applicationServer, _applicationV8, vocbase);
   console.start();
 
-#ifdef __APPLE__
-  if (_applicationServer->programOptions().has("voice")) {
-    system("say -v zarvox 'welcome to ArangoDB' &");
-  }
-#endif
-
   // disabled maintenance mode
   waitForHeartbeat();
   HttpHandlerFactory::setMaintenance(false);
 
   // just wait until we are signalled
   _applicationServer->wait();
-
-#ifdef __APPLE__
-  if (_applicationServer->programOptions().has("voice")) {
-    system("say -v zarvox 'good-bye' &");
-  }
-#endif
 
   // .............................................................................
   // and cleanup

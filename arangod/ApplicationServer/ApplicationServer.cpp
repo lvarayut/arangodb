@@ -43,24 +43,6 @@
 using namespace arangodb::basics;
 using namespace arangodb::rest;
 
-static std::string DeprecatedParameter;
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief Hidden Options
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-std::string const OPTIONS_HIDDEN = "Hidden Options";
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief Command Line Options
-////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-std::string const OPTIONS_CMDLINE = "General Options";
-}
-
 ApplicationServer::ApplicationServer(std::string const& name,
                                      std::string const& title,
                                      std::string const& version)
@@ -85,12 +67,8 @@ ApplicationServer::ApplicationServer(std::string const& name,
       _logApplicationName("arangod"),
       _logFacility(""),
       _logFile("+"),
-      _logTty("+"),
       _logRequestsFile(""),
-      _logPrefix(),
-      _logThreadId(false),
       _logLineNumber(false),
-      _logLocalTime(false),
       _logContentFilter(),
 #ifdef _WIN32
       _randomGenerator(5),
@@ -139,117 +117,20 @@ void ApplicationServer::setUserConfigFile(std::string const& name) {
 
 std::string const& ApplicationServer::getName() const { return _name; }
 
+std::shared_ptr<options::ProgramOptions> PROGRAM_OPTIONS;
+LoggerFeature* LOGGER_FEATURE;
+
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief sets up the logging
 ////////////////////////////////////////////////////////////////////////////////
 
 void ApplicationServer::setupLogging(bool threaded, bool daemon,
                                      bool backgrounded) {
-  Logger::shutdown(false);
-  Logger::initialize(threaded);
+  LOGGER_FEATURE->setThreaded(threaded);
+  LOGGER_FEATURE->setbackgrounded(backgrounded);
+  LOGGER_FEATURE->setDaemon(daemon);
 
-  if (_options.has("log.thread")) {
-    _logThreadId = true;
-  }
-
-  if (_options.has("log.line-number")) {
-    _logLineNumber = true;
-  }
-
-  if (_options.has("log.use-local-time")) {
-    _logLocalTime = true;
-  }
-
-  Logger::setUseLocalTime(_logLocalTime);
-  Logger::setShowLineNumber(_logLineNumber);
-  Logger::setOutputPrefix(_logPrefix);
-  Logger::setShowThreadIdentifier(_logThreadId);
-
-  std::vector<std::string> levels;
-  std::vector<std::string> outputs;
-
-  // map deprecated option "log.requests-files" to "log.output"
-  if (!_logRequestsFile.empty()) {
-    std::string const& filename = _logRequestsFile;
-    std::string definition;
-
-    if (filename == "+" || filename == "-") {
-      definition = filename;
-    } else if (daemon) {
-      definition = "file://" + filename + ".daemon";
-    } else {
-      definition = "file://" + filename;
-    }
-
-    levels.push_back("requests=info");
-    outputs.push_back("requests=" + definition);
-  }
-
-// map deprecated option "log.facility" to "log.output"
-#ifdef ARANGODB_ENABLE_SYSLOG
-  if (!_logFacility.empty()) {
-    outputs.push_back("syslog://" + _logFacility + "/" + _logApplicationName);
-  }
-#endif
-
-  if (_options.has("log.performance")) {
-    levels.push_back("requests=trace");
-  }
-
-  // map "log.file" to "log.output"
-  if (!_logFile.empty()) {
-    std::string const& filename = _logFile;
-    std::string definition;
-
-    if (filename == "+" || filename == "-") {
-      definition = filename;
-    } else if (daemon) {
-      definition = "file://" + filename + ".daemon";
-    } else {
-      definition = "file://" + filename;
-    }
-
-    outputs.push_back(definition);
-  }
-
-  // additional log file in case of tty
-  bool ttyLogger = false;
-
-  if (!backgrounded && isatty(STDIN_FILENO) != 0 && !_logTty.empty()) {
-    bool ttyOut = (_logTty == "+" || _logTty == "-");
-
-    if (!ttyOut) {
-      LOG(ERR) << "'log.tty' must either be '+' or '-', ignoring value '"
-               << _logTty << "'";
-    } else {
-      bool regularOut = false;
-
-      for (auto const& definition : _logOutput) {
-        regularOut = regularOut || definition == "+" || definition == "-";
-      }
-
-      for (auto const& definition : outputs) {
-        regularOut = regularOut || definition == "+" || definition == "-";
-      }
-
-      if (!regularOut) {
-        outputs.push_back(_logTty);
-        ttyLogger = true;
-      }
-    }
-  }
-
-  // create all output definitions
-  levels.insert(levels.end(), _logLevel.begin(), _logLevel.end());
-  outputs.insert(outputs.end(), _logOutput.begin(), _logOutput.end());
-
-  Logger::setLogLevel(levels);
-
-  std::unordered_set<std::string> filenames;
-
-  for (auto const& definition : outputs) {
-    Logger::addAppender(definition, !ttyLogger, _logContentFilter, filenames);
-  }
+  LOGGER_FEATURE->prepare();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -759,37 +640,13 @@ void ApplicationServer::setupOptions(
 
   // clang-format off
 
-  options["Logging Options:help-default:help-log"]
-    ("log.file", &_logFile, "log to file")
-    ("log.level,l", &_logLevel, "log level")
-    ("log.output,o", &_logOutput, "log output")
-  ;
-
-  options["Logging Options:help-log"]
-    ("log.application", &_logApplicationName, "application name for syslog")
-    ("log.content-filter", &_logContentFilter,
-       "only log message containing the specified string (case-sensitive)")
-    ("log.line-number", "always log file and line number")
-    ("log.prefix", &_logPrefix, "prefix log")
-    ("log.thread", "log the thread identifier")
-    ("log.use-local-time", "use local dates and times in log messages")
-    ("log.tty", &_logTty, "additional log file if started on tty")
-  ;
-
   options["Hidden Options"]
-    ("log", &_logLevel, "log level")
 #ifdef ARANGODB_HAVE_SETUID
     ("uid", &_uid, "switch to user-id after reading config files")
 #endif
 #ifdef ARANGODB_HAVE_SETGID
     ("gid", &_gid, "switch to group-id after reading config files")
 #endif
-  ;
-
-  options["Hidden Options"]
-    ("log.performance", "log performance indicators (deprecated)")
-    ("log.requests-file", &_logRequestsFile, "log requests to file (deprecated)")
-    ("log.facility", &_logFacility, "facility name for syslog (deprecated)")
   ;
 
   // clang-format on

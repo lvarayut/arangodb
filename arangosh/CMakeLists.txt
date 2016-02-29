@@ -171,9 +171,10 @@ endif ()
 add_executable(${BIN_ARANGOSH}
   ${ProductVersionFiles_arangosh}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
-  ArangoShell/ArangoClient.cpp
+  Restore/ArangorestoreFeature.cpp
   V8Client/V8ClientConnection.cpp
   V8Client/arangosh.cpp
+  V8Client/ArangoClientHelper.cpp
 )
 
 target_link_libraries(${BIN_ARANGOSH}
