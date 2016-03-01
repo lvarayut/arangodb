@@ -27,8 +27,11 @@
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
 #include "Rest/Endpoint.h"
+#include "SimpleHttpClient/GeneralClientConnection.h"
+#include "SimpleHttpClient/SimpleHttpClient.h"
 
 using namespace arangodb;
+using namespace arangodb::httpclient;
 using namespace arangodb::options;
 using namespace arangodb::rest;
 
@@ -44,7 +47,8 @@ ClientFeature::ClientFeature(application_features::ApplicationServer* server,
       _requestTimeout(requestTimeout),
       _sslProtocol(4),
       _section("server"),
-      _endpointServer(nullptr) {
+      _retries(DEFAULT_RETRIES),
+      _warn(false) {
   setOptional(false);
   requiresElevatedPrivileges(false);
 }
@@ -129,15 +133,23 @@ void ClientFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {
   }
 }
 
-void ClientFeature::createEndpointServer() { createEndpointServer(_endpoint); }
+std::unique_ptr<SimpleHttpClient> ClientFeature::createHttpClient() {
+  return createHttpClient(_endpoint);
+}
 
-void ClientFeature::createEndpointServer(std::string const& definition) {
-  // close previous endpoint
-  if (_endpointServer != nullptr) {
-    delete _endpointServer;
-    _endpointServer = nullptr;
+std::unique_ptr<SimpleHttpClient> ClientFeature::createHttpClient(
+    std::string const& definition) {
+  std::unique_ptr<Endpoint> endpoint(Endpoint::clientFactory(definition));
+
+  if (endpoint.get() == nullptr) {
+    LOG(ERR) << "invalid value for --server.endpoint ('" << definition << "')";
+    THROW_ARANGO_EXCEPTION(TRI_ERROR_BAD_PARAMETER);
   }
 
-  // create a new endpoint
-  _endpointServer = Endpoint::clientFactory(definition);
+  std::unique_ptr<GeneralClientConnection> connection(
+      GeneralClientConnection::factory(endpoint, _requestTimeout,
+                                       _connectionTimeout, _retries,
+                                       _sslProtocol));
+
+  return std::make_unique<SimpleHttpClient>(connection, _requestTimeout, _warn);
 }

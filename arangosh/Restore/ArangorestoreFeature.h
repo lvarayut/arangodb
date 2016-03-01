@@ -47,7 +47,6 @@ class ArangorestoreFeature final
       std::shared_ptr<options::ProgramOptions> options) override;
   void prepare() override;
   void start() override;
-  void stop() override;
 
  private:
   std::vector<std::string> _collections;
@@ -75,6 +74,7 @@ class ArangorestoreFeature final
 
  private:
   int* _result;
+  std::unique_ptr<arangodb::httpclient::SimpleHttpClient> _httpClient;
 
   // statistics
   struct {

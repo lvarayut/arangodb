@@ -626,29 +626,15 @@ void ArangorestoreFeature::start() {
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
 
   int ret = EXIT_SUCCESS;
-
   *_result = ret;
 
-  client->createEndpointServer();
-
-  if (client->endpointServer() == nullptr) {
-    LOG(FATAL) << "invalid value for --server.endpoint ('" << client->endpoint()
-               << "')";
+  try {
+    _httpClient = client->createHttpClient();
+  }
+  catch (...) {
+    LOG(FATAL) << "cannot create server connection, giving up!";
     FATAL_ERROR_EXIT();
   }
-
-  _connection = GeneralClientConnection::factory(
-      client->endpointServer(), client->requestTimeout(),
-      client->connectionTimeout(), ClientFeature::DEFAULT_RETRIES,
-      client->sslProtocol());
-
-  if (_connection == nullptr) {
-    LOG(FATAL) << "out of memory";
-    FATAL_ERROR_EXIT();
-  }
-
-  _httpClient =
-      new SimpleHttpClient(_connection, client->requestTimeout(), false);
 
   std::string dbName = client->databaseName();
 
@@ -679,9 +665,9 @@ void ArangorestoreFeature::start() {
     versionString = getArangoVersion(nullptr);
   }
 
-  if (!_connection->isConnected()) {
+  if (!_httpClient->isConnected()) {
     LOG(ERR) << "Could not connect to endpoint "
-             << client->endpointServer()->getSpecification();
+             << _httpClient->getEndpointSpecification();
     LOG(FATAL) << _httpClient->getErrorMessage() << "'";
     FATAL_ERROR_EXIT();
   }
@@ -715,7 +701,7 @@ void ArangorestoreFeature::start() {
 
   if (_progress) {
     std::cout << "# Connected to ArangoDB '"
-              << client->endpointServer()->getSpecification() << "'"
+              << _httpClient->getEndpointSpecification() << "'"
               << std::endl;
   }
 
@@ -753,11 +739,5 @@ void ArangorestoreFeature::start() {
       std::cout << "Processed " << _stats._totalCollections << " collection(s)"
                 << std::endl;
     }
-  }
-}
-
-void ArangorestoreFeature::stop() {
-  if (_httpClient != nullptr) {
-    delete _httpClient;
   }
 }

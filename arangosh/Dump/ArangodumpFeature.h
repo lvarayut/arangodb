@@ -43,7 +43,6 @@ class ArangodumpFeature final : public application_features::ApplicationFeature,
       std::shared_ptr<options::ProgramOptions> options) override;
   void prepare() override;
   void start() override;
-  void stop() override;
 
  private:
   std::vector<std::string> _collections;

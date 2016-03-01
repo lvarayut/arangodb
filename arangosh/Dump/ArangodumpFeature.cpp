@@ -975,29 +975,15 @@ void ArangodumpFeature::start() {
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
 
   int ret = EXIT_SUCCESS;
-
   *_result = ret;
 
-  client->createEndpointServer();
-
-  if (client->endpointServer() == nullptr) {
-    LOG(FATAL) << "invalid value for --server.endpoint ('" << client->endpoint()
-               << "')";
+  try {
+    _httpClient = client->createHttpClient();
+  }
+  catch (...) {
+    LOG(FATAL) << "cannot create server connection, giving up!";
     FATAL_ERROR_EXIT();
   }
-
-  _connection = GeneralClientConnection::factory(
-      client->endpointServer(), client->requestTimeout(),
-      client->connectionTimeout(), ClientFeature::DEFAULT_RETRIES,
-      client->sslProtocol());
-
-  if (_connection == nullptr) {
-    LOG(FATAL) << "out of memory";
-    FATAL_ERROR_EXIT();
-  }
-
-  _httpClient =
-      new SimpleHttpClient(_connection, client->requestTimeout(), false);
 
   std::string dbName = client->databaseName();
 
@@ -1006,7 +992,7 @@ void ArangodumpFeature::start() {
 
   std::string const versionString = getArangoVersion(nullptr);
 
-  if (!_connection->isConnected()) {
+  if (!_httpClient->isConnected()) {
     LOG(ERR) << "Could not connect to endpoint '" << client->endpoint()
              << "', database: '" << dbName << "', username: '"
              << client->username() << "'";
@@ -1049,7 +1035,7 @@ void ArangodumpFeature::start() {
     }
   }
 
-  if (!_connection->isConnected()) {
+  if (!_httpClient->isConnected()) {
     LOG(ERR) << "Lost connection to endpoint '" << client->endpoint()
              << "', database: '" << dbName << "', username: '"
              << client->username() << "'";
@@ -1121,10 +1107,4 @@ void ArangodumpFeature::start() {
   }
 
   *_result = ret;
-}
-
-void ArangodumpFeature::stop() {
-  if (_httpClient != nullptr) {
-    delete _httpClient;
-  }
 }

@@ -171,7 +171,7 @@ endif ()
 add_executable(${BIN_ARANGOSH}
   ${ProductVersionFiles_arangosh}
   ${PROJECT_SOURCE_DIR}/lib/Basics/WorkMonitorDummy.cpp
-  Restore/ArangorestoreFeature.cpp
+  Shell/ArangoshFeature.cpp
   V8Client/V8ClientConnection.cpp
   V8Client/arangosh.cpp
   V8Client/ArangoClientHelper.cpp

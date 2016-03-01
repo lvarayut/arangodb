@@ -30,7 +30,7 @@
 #include "Basics/files.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/InitializeRest.h"
-#include "Restore/ArangorestoreFeature.h"
+#include "Shell/ArangoshFeature.h"
 
 using namespace arangodb;
 using namespace arangodb::application_features;
@@ -55,8 +55,8 @@ int main(int argc, char* argv[]) {
   server.addFeature(new LoggerFeature(&server));
   server.addFeature(new ConfigFeature(&server, name));
   server.addFeature(new ClientFeature(&server));
-  server.addFeature(new ArangorestoreFeature(&server, &ret));
-  server.addFeature(new ShutdownFeature(&server, "ArangorestoreFeature"));
+  server.addFeature(new ArangoshFeature(&server, &ret));
+  server.addFeature(new ShutdownFeature(&server, "ArangoshFeature"));
 
   server.run(argc, argv);
 

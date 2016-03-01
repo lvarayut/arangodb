@@ -45,11 +45,7 @@ class ArangoClientHelper {
   bool getArangoIsCluster(int* err);
 
  protected:
-  // HTTP client
-  httpclient::SimpleHttpClient* _httpClient;
-
-  // the initial default connection
-  httpclient::GeneralClientConnection* _connection;
+  std::unique_ptr<httpclient::SimpleHttpClient> _httpClient;
 };
 }
 

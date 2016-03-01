@@ -154,6 +154,8 @@ int ArangobFeature::getStartCounter() { return _started; }
 void ArangobFeature::start() {
   ClientFeature* client =
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
+  client->setRetries(3);
+  client->setWarn(true);
 
   int ret = EXIT_SUCCESS;
 
@@ -165,14 +167,6 @@ void ArangobFeature::start() {
   if (benchmark == nullptr) {
     ARANGOB = nullptr;
     LOG(FATAL) << "invalid test case name '" << _testCase << "'";
-    FATAL_ERROR_EXIT();
-  }
-
-  client->createEndpointServer();
-
-  if (client->endpointServer() == nullptr) {
-    LOG(FATAL) << "invalid value for --server.endpoint ('" << client->endpoint()
-               << "')";
     FATAL_ERROR_EXIT();
   }
 
@@ -207,10 +201,8 @@ void ArangobFeature::start() {
 
     BenchmarkThread* thread = new BenchmarkThread(
         benchmark.get(), &startCondition, &ArangobFeature::updateStartCounter,
-        i, (unsigned long)_batchSize, &operationsCounter, endpoint,
-        client->databaseName(), client->username(), client->password(),
-        client->requestTimeout(), client->connectionTimeout(),
-        client->sslProtocol(), _keepAlive, _async, _verbose);
+        i, (unsigned long)_batchSize, &operationsCounter, client, _keepAlive,
+        _async, _verbose);
 
     threads.push_back(thread);
     thread->setOffset((size_t)(i * realStep));

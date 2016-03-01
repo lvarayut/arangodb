@@ -70,12 +70,15 @@ void ArangoshFeature::validateOptions(
 }
 
 void ArangoshFeature::prepare() {
-  check features;
+#warning check features;
 }
 
 void ArangoshFeature::start() {
   ClientFeature* client =
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
+}
+
+#if 0
 
   int ret = EXIT_SUCCESS;
 
@@ -226,8 +229,12 @@ void ArangoshFeature::start() {
   *_result = ret;
 }
 
+#endif
+
 void ArangoshFeature::stop() {
+#if 0
   if (_httpClient != nullptr) {
     delete _httpClient;
   }
+#endif
 }

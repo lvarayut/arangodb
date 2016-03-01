@@ -35,8 +35,7 @@ using namespace arangodb::basics;
 using namespace arangodb::httpclient;
 using namespace arangodb::rest;
 
-ArangoClientHelper::ArangoClientHelper()
-    : _httpClient(nullptr), _connection(nullptr) {}
+ArangoClientHelper::ArangoClientHelper() : _httpClient(nullptr) {}
 
 // helper to rewrite HTTP location
 std::string ArangoClientHelper::rewriteLocation(void* data,
@@ -127,7 +126,7 @@ std::string ArangoClientHelper::getArangoVersion(int* err) {
                                    false);
     }
 
-    _connection->disconnect();
+    _httpClient->disconnect();
   }
 
   return version;
@@ -155,10 +154,11 @@ bool ArangoClientHelper::getArangoIsCluster(int* err) {
     }
   } else {
     if (response->wasHttpError()) {
-      _httpClient->setErrorMessage(getHttpErrorMessage(response.get(), err), false);
+      _httpClient->setErrorMessage(getHttpErrorMessage(response.get(), err),
+                                   false);
     }
 
-    _connection->disconnect();
+    _httpClient->disconnect();
   }
 
   return role == "COORDINATOR";

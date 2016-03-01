@@ -147,52 +147,38 @@ void ArangoimpFeature::start() {
       dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
 
   int ret = EXIT_SUCCESS;
-
   *_result = ret;
 
-  client->createEndpointServer();
+  std::unique_ptr<SimpleHttpClient> httpClient;
 
-  if (client->endpointServer() == nullptr) {
-    LOG(FATAL) << "invalid value for --server.endpoint ('" << client->endpoint()
-               << "')";
+  try {
+    httpClient = client->createHttpClient();
+  }
+  catch (...) {
+    LOG(FATAL) << "cannot create server connection, giving up!";
     FATAL_ERROR_EXIT();
   }
-
-  std::unique_ptr<arangodb::httpclient::GeneralClientConnection> connection;
-
-  connection.reset(GeneralClientConnection::factory(
-      client->endpointServer(), client->requestTimeout(),
-      client->connectionTimeout(), ClientFeature::DEFAULT_RETRIES,
-      client->sslProtocol()));
-
-  if (connection == nullptr) {
-    LOG(FATAL) << "out of memory";
-    FATAL_ERROR_EXIT();
-  }
-
-  SimpleHttpClient httpClient(connection.get(), client->requestTimeout(),
-                              false);
 
   std::string dbName = client->databaseName();
 
-  httpClient.setLocationRewriter((void*)&dbName, &rewriteLocation);
-  httpClient.setUserNamePassword("/", client->username(), client->password());
+  httpClient->setLocationRewriter((void*)&dbName, &rewriteLocation);
+  httpClient->setUserNamePassword("/", client->username(), client->password());
 
   // must stay here in order to establish the connection
-  httpClient.getServerVersion();
+  httpClient->getServerVersion();
 
-  if (!connection->isConnected()) {
+  if (!httpClient->isConnected()) {
     LOG(ERR) << "Could not connect to endpoint '" << client->endpoint()
              << "', database: '" << client->databaseName()
              << "', username: '" << client->username() << "'";
-    LOG(FATAL) << httpClient.getErrorMessage() << "'";
+    LOG(FATAL) << httpClient->getErrorMessage() << "'";
     FATAL_ERROR_EXIT();
   }
 
   // successfully connected
   std::cout << "Connected to ArangoDB '"
-            << client->endpointServer()->getSpecification() << "', version "
-            << httpClient.getServerVersion() << ", database: '"
+            << httpClient->getEndpointSpecification() << "', version "
+            << httpClient->getServerVersion() << ", database: '"
             << client->databaseName() << "', username: '" << client->username()
             << "'" << std::endl;
 
@@ -213,7 +199,7 @@ void ArangoimpFeature::start() {
   std::cout << "request timeout:  " << client->requestTimeout() << std::endl;
   std::cout << "----------------------------------------" << std::endl;
 
-  arangodb::import::ImportHelper ih(&httpClient, _chunkSize);
+  arangodb::import::ImportHelper ih(httpClient.get(), _chunkSize);
 
   // create colletion
   if (_createCollection) {

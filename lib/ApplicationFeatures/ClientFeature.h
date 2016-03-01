@@ -26,6 +26,9 @@
 #include "ApplicationFeatures/ApplicationFeature.h"
 
 namespace arangodb {
+namespace httpclient {
+class SimpleHttpClient;
+}
 namespace rest {
 class Endpoint;
 }
@@ -58,11 +61,20 @@ class ClientFeature final : public application_features::ApplicationFeature {
   uint64_t sslProtocol() const { return _sslProtocol; }
 
  public:
-  void createEndpointServer();
-  void createEndpointServer(std::string const& endpoint);
-  rest::Endpoint* endpointServer() { return _endpointServer; }
+  std::unique_ptr<httpclient::SimpleHttpClient> createHttpClient();
+  std::unique_ptr<httpclient::SimpleHttpClient> createHttpClient(
+      std::string const& definition);
+
   void setDatabaseName(std::string const& databaseName) {
     _databaseName = databaseName;
+  }
+
+  void setRetries(size_t retries) {
+    _retries = retries;
+  }
+
+  void setWarn(bool warn) {
+    _warn = warn;
   }
 
  private:
@@ -77,7 +89,8 @@ class ClientFeature final : public application_features::ApplicationFeature {
 
  private:
   std::string _section;
-  rest::Endpoint* _endpointServer;
+  size_t _retries;
+  bool _warn;
 };
 }
 
