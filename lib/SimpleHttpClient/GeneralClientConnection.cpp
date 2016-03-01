@@ -49,7 +49,7 @@ GeneralClientConnection::GeneralClientConnection(Endpoint* endpoint,
 GeneralClientConnection::GeneralClientConnection(
     std::unique_ptr<Endpoint>& endpoint, double requestTimeout,
     double connectTimeout, size_t connectRetries)
-    : _endpoint(endpoint.get()),
+    : _endpoint(endpoint.release()),
       _freeEndpointOnDestruction(true),
       _requestTimeout(requestTimeout),
       _connectTimeout(connectTimeout),

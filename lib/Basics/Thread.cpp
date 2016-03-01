@@ -142,7 +142,8 @@ Thread::Thread(std::string const& name)
 ////////////////////////////////////////////////////////////////////////////////
 
 Thread::~Thread() {
-  LOG_TOPIC(TRACE, Logger::THREADS) << "delete(" << _name << ")";
+  LOG_TOPIC(TRACE, Logger::THREADS) << "delete(" << _name << ") in state "
+                                    << (int)_state.load();
 
   if (_state.load() == ThreadState::STOPPED) {
 #ifdef TRI_HAVE_POSIX_THREADS
@@ -175,6 +176,9 @@ void Thread::beginShutdown() {
          state != ThreadState::DETACHED) {
     _state.compare_exchange_strong(state, ThreadState::STOPPING);
   }
+
+  LOG_TOPIC(TRACE, Logger::THREADS) << "beginShutdown(" << _name
+                                    << ") reached state " << (int)_state.load();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -260,8 +264,7 @@ bool Thread::start(ConditionVariable* finishedCondition) {
     }
   } else {
     _state.store(ThreadState::STOPPED);
-    LOG_TOPIC(ERR, Logger::THREADS) << "could not start thread '"
-                                    << _name
+    LOG_TOPIC(ERR, Logger::THREADS) << "could not start thread '" << _name
                                     << "': " << strerror(errno);
 
     return false;
@@ -327,21 +330,21 @@ void Thread::runMe() {
     run();
     _state.store(ThreadState::STOPPED);
   } catch (Exception const& ex) {
-    LOG_TOPIC(ERR, Logger::THREADS) << "exception caught in thread '"
-                                    << _name << "': " << ex.what();
+    LOG_TOPIC(ERR, Logger::THREADS) << "exception caught in thread '" << _name
+                                    << "': " << ex.what();
     Logger::flush();
     _state.store(ThreadState::STOPPED);
     throw;
   } catch (std::exception const& ex) {
-    LOG_TOPIC(ERR, Logger::THREADS) << "exception caught in thread '"
-                                    << _name << "': " << ex.what();
+    LOG_TOPIC(ERR, Logger::THREADS) << "exception caught in thread '" << _name
+                                    << "': " << ex.what();
     Logger::flush();
     _state.store(ThreadState::STOPPED);
     throw;
   } catch (...) {
     if (!isSilent()) {
-      LOG_TOPIC(ERR, Logger::THREADS) << "exception caught in thread '"
-                                      << _name << "'";
+      LOG_TOPIC(ERR, Logger::THREADS) << "exception caught in thread '" << _name
+                                      << "'";
       Logger::flush();
     }
     _state.store(ThreadState::STOPPED);

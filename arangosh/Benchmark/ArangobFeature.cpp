@@ -65,6 +65,7 @@ ArangobFeature::ArangobFeature(application_features::ApplicationServer* server,
       _delay(false),
       _progress(true),
       _verbose(false),
+      _quiet(false),
       _result(result) {
   requiresElevatedPrivileges(false);
   setOptional(false);
@@ -304,7 +305,6 @@ void ArangobFeature::start() {
   benchmark->tearDown();
 
   for (int i = 0; i < _concurreny; ++i) {
-    threads[i]->beginShutdown();
     delete threads[i];
     delete endpoints[i];
   }

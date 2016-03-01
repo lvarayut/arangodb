@@ -50,7 +50,7 @@ class BenchmarkThread : public arangodb::Thread {
                   BenchmarkCounter<unsigned long>* operationsCounter,
                   ClientFeature* client, bool keepAlive, bool async,
                   bool verbose)
-      : Thread("arangob"),
+      : Thread("BenchmarkThread"),
         _operation(operation),
         _startCondition(condition),
         _callback(callback),
@@ -130,7 +130,7 @@ class BenchmarkThread : public arangodb::Thread {
       guard.wait();
     }
 
-    while (1) {
+    while (!isStopping()) {
       unsigned long numOps = _operationsCounter->next(_batchSize);
 
       if (numOps == 0) {
@@ -158,6 +158,7 @@ class BenchmarkThread : public arangodb::Thread {
           FATAL_ERROR_EXIT();
         }
       }
+
       _operationsCounter->done(_batchSize > 0 ? _batchSize : 1);
     }
   }
