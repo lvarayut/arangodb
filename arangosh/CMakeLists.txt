@@ -40,6 +40,8 @@ install(
 
 install_config(arangob)
 
+add_dependencies(arangob zlibstatic v8_build) # v8_build includes ICU build
+
 ################################################################################
 ## arangodump
 ################################################################################
@@ -76,6 +78,8 @@ install(
   RUNTIME DESTINATION ${ARANGODB_INSTALL_BIN})
 
 install_config(arangodump)
+
+add_dependencies(arangodump zlibstatic v8_build) # v8_build includes ICU build
 
 ################################################################################
 ## arangoimp
@@ -115,6 +119,8 @@ install(
 
 install_config(arangoimp)
 
+add_dependencies(arangoimp zlibstatic v8_build) # v8_build includes ICU build
+
 ################################################################################
 ## arangorestore
 ################################################################################
@@ -152,6 +158,8 @@ install(
 
 install_config(arangorestore)
 
+add_dependencies(arangorestore zlibstatic v8_build) # v8_build includes ICU build
+
 ################################################################################
 ## arangosh
 ################################################################################
@@ -182,6 +190,7 @@ target_link_libraries(${BIN_ARANGOSH}
   ${LIB_ARANGO}
   ${LINENOISE_LIBS}
   ${MSVC_LIBS}
+  ${V8_LIBS}
   ${SYSTEM_LIBRARIES}
 )
 
@@ -190,6 +199,8 @@ install(
   RUNTIME DESTINATION ${ARANGODB_INSTALL_BIN})
 
 install_config(arangosh)
+
+add_dependencies(arangosh zlibstatic v8_build)
 
 ################################################################################
 ## foxx-manager
