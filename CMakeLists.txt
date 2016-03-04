@@ -14,7 +14,7 @@ if (APPLE)
   if (NOT DEFINED CMAKE_C_COMPILER)
     set(CMAKE_C_COMPILER /usr/bin/clang)
   endif ()
-  
+
   if (NOT DEFINED CMAKE_CXX_COMPILER)
     set(CMAKE_CXX_COMPILER /usr/bin/clang++)
   endif ()
@@ -112,7 +112,7 @@ elseif (UNIX AND NOT APPLE)
     set(SYSV5 TRUE)
   elseif ((CMAKE_SYSTEM_NAME MATCHES "Solaris.*") OR (CMAKE_SYSTEM_NAME MATCHES "SunOS.*"))
     set(SOLARIS TRUE)
-   elseif (CMAKE_SYSTEM_NAME MATCHES "HP-UX.*")
+  elseif (CMAKE_SYSTEM_NAME MATCHES "HP-UX.*")
     set(HPUX TRUE)
   elseif (CMAKE_SYSTEM_NAME MATCHES "AIX.*")
     set(AIX TRUE)
@@ -182,6 +182,8 @@ else ()
   set(BASE_FLAGS)
   set(BASE_C_FLAGS ${CMAKE_C_FLAGS})
   set(BASE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  set(BASE_LD_FLAGS $ENV{LDFLAGS})
+  set(BASE_LIBS $ENV{LIBS})
 endif ()
 
 if (SOLARIS)
@@ -218,6 +220,7 @@ include(CheckCXX11Features)
 find_package(Threads REQUIRED)
 
 if (MSVC)
+  configure_file("Installation/Windows/vcproj.user/arangod.vcxproj.user" ${CMAKE_BINARY_DIR})
   add_definitions("-D_CRT_SECURE_NO_WARNINGS=1")
   add_definitions("-DFD_SETSIZE=2048")
   add_definitions("-DUSE_REGEX_STATIC=1")
@@ -226,7 +229,11 @@ if (MSVC)
   set(MSVC_LIBS crypt32.lib;WINMM.LIB;Ws2_32.lib;getopt;regex)
 
   set(CMAKE_EXE_LINKER_FLAGS
-    "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:CONSOLE /LTCG /SAFESEH:NO /MACHINE:x64 /ignore:4099"
+    "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:CONSOLE /LTCG /SAFESEH:NO /MACHINE:x64 /ignore:4099 ${BASE_LD_FLAGS}"
+  )
+else ()
+  set(CMAKE_EXE_LINKER_FLAGS
+    "${CMAKE_EXE_LINKER_FLAGS} ${BASE_LD_FLAGS}"
   )
 endif ()
 
@@ -392,7 +399,7 @@ elseif (CMAKE_COMPILER_IS_CLANG)
   set(CMAKE_CXX_FLAGS_RELEASE        "-O3 -fomit-frame-pointer"       CACHE INTERNAL "C++ release flags")
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -fno-omit-frame-pointer" CACHE INTERNAL "C++ release with debug info flags")
 
-elseif (MSVC) 
+elseif (MSVC)
   if (VERBOSE)
     message(STATUS "Compiler type MSVC: ${CMAKE_CXX_COMPILER}")
   endif ()
@@ -455,6 +462,14 @@ if (VERBOSE)
 
   message(STATUS "Info BASE_CXX_FLAGS")
   message(STATUS "${BASE_CXX_FLAGS}")
+  message(STATUS)
+
+  message(STATUS "Info BASE_LD_FLAGS")
+  message(STATUS "${BASE_LD_FLAGS}")
+  message(STATUS)
+
+  message(STATUS "Info BASE_LIBS")
+  message(STATUS "${BASE_LIBS}")
   message(STATUS)
 
   message(STATUS "Info CMAKE_C_FLAGS")
@@ -680,6 +695,7 @@ list(INSERT SYSTEM_LIBRARIES 0
   ${ZLIB_LIBS}
   ${ICU_LIBS}
   ${OPENSSL_LIBRARIES}
+  ${BASE_LIBS}
   ${CMAKE_THREAD_LIBS_INIT}
   ${CMAKE_DL_LIBS}
 )
