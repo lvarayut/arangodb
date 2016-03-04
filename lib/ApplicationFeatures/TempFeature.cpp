@@ -42,18 +42,8 @@ void TempFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
                      new StringParameter(&_path));
 }
 
-#warning TODO
-#if 0
-
-      std::string p = TRI_GetTempPath();
-
-  if (p.empty()) {
-    _tempPath = p;
+void TempFeature::start() {
+  if (options->processingResult().touched("temp.path")) {
+    TRI_SetUserTempPath((char*)_path.c_str());
   }
-
-  // set temp path
-  if (options.has("temp-path")) {
-    TRI_SetUserTempPath((char*)_tempPath.c_str());
-  }
-
-#endif
+}

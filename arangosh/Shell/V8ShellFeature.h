@@ -51,6 +51,7 @@ class V8ShellFeature final : public application_features::ApplicationFeature {
   std::string _startupDirectory;
   bool _currentModuleDirectory;
   uint64_t _gcInterval;
+  uint64_t _chunkSize;
 
  public:
   int runShell(std::vector<std::string> const&);
