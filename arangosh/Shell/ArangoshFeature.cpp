@@ -17,56 +17,107 @@
 ///
 /// Copyright holder is ArangoDB GmbH, Cologne, Germany
 ///
-/// @author Jan Steemann
+/// @author Dr. Frank Celler
 ////////////////////////////////////////////////////////////////////////////////
 
 #include "ArangoshFeature.h"
 
-#include <iostream>
-
-#include <velocypack/Iterator.h>
-#include <velocypack/velocypack-aliases.h>
-
 #include "ApplicationFeatures/ClientFeature.h"
-#include "ArangoShell/ArangoClient.h"
-#include "Basics/FileUtils.h"
-#include "Basics/StringUtils.h"
-#include "Basics/VelocyPackHelper.h"
-#include "Basics/files.h"
-#include "Basics/tri-strings.h"
+#include "Logger/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
-#include "Rest/Endpoint.h"
-#include "Rest/HttpResponse.h"
-#include "Rest/SslInterface.h"
-#include "SimpleHttpClient/GeneralClientConnection.h"
-#include "SimpleHttpClient/SimpleHttpClient.h"
-#include "SimpleHttpClient/SimpleHttpResult.h"
+#include "Shell/V8ShellFeature.h"
 
 using namespace arangodb;
 using namespace arangodb::basics;
-using namespace arangodb::httpclient;
 using namespace arangodb::options;
-using namespace arangodb::rest;
 
 ArangoshFeature::ArangoshFeature(
     application_features::ApplicationServer* server, int* result)
-    : ApplicationFeature(server, "ArangoshFeature") {
+    : ApplicationFeature(server, "ArangoshFeature"),
+      _jslint(),
+      _result(result),
+      _runMode(RunMode::INTERACTIVE) {
   requiresElevatedPrivileges(false);
   setOptional(false);
   startsAfter("ConfigFeature");
   startsAfter("LoggerFeature");
+  startsAfter("LanguageFeature");
+  startsAfter("V8ShellFeature");
 }
 
 void ArangoshFeature::collectOptions(
     std::shared_ptr<options::ProgramOptions> options) {
   options->addSection(
       Section("", "Global configuration", "global options", false, false));
+
+  options->addOption("--jslint", "do not start as shell, run jslint instead",
+                     new VectorParameter<StringParameter>(&_jslint));
+
+  options->addOption("--javascript.execute",
+                     "execute Javascript code from file",
+                     new VectorParameter<StringParameter>(&_executeScripts));
+
+  options->addOption("--javascript.execute-string",
+                     "execute Javascript code from string",
+                     new VectorParameter<StringParameter>(&_executeStrings));
+
+  options->addOption("--javascript.check-syntax",
+                     "syntax check code Javascript code from file",
+                     new VectorParameter<StringParameter>(&_checkSyntaxFiles));
+
+  options->addOption("--javascript.unit-tests",
+                     "do not start as shell, run unit tests instead",
+                     new VectorParameter<StringParameter>(&_unitTests));
 }
 
 void ArangoshFeature::validateOptions(
     std::shared_ptr<options::ProgramOptions> options) {
-  auto const& positionals = options->processingResult()._positionals;
-  size_t n = positionals.size();
+  _positionals = options->processingResult()._positionals;
+
+  ClientFeature* client =
+      dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
+
+  if (client->endpoint() == "none") {
+    client->disable();
+  }
+
+  if (!_jslint.empty()) {
+    client->disable();
+  }
+
+  size_t n = 0;
+
+  _runMode = RunMode::INTERACTIVE;
+
+  if (!_executeScripts.empty()) {
+    _runMode = RunMode::EXECUTE_SCRIPT;
+    ++n;
+  }
+
+  if (!_executeStrings.empty()) {
+    _runMode = RunMode::EXECUTE_STRING;
+    ++n;
+  }
+
+  if (!_checkSyntaxFiles.empty()) {
+    _runMode = RunMode::CHECK_SYNTAX;
+    ++n;
+  }
+
+  if (!_unitTests.empty()) {
+    _runMode = RunMode::UNIT_TESTS;
+    ++n;
+  }
+
+  if (!_jslint.empty()) {
+    _runMode = RunMode::JSLINT;
+    ++n;
+  }
+
+  if (1 < n) {
+    LOG(ERR) << "you cannot specify more than one type ("
+             << "jslint, execute, execute-string, check-syntax, unit-tests)";
+  }
 }
 
 void ArangoshFeature::prepare() {
@@ -74,167 +125,20 @@ void ArangoshFeature::prepare() {
 }
 
 void ArangoshFeature::start() {
-  ClientFeature* client =
-      dynamic_cast<ClientFeature*>(server()->feature("ClientFeature"));
+  ConsoleFeature* client =
+      dynamic_cast<ConsoleFeature*>(server()->feature("ConsoleFeature"));
+
+  if (_runMode != RunMode::INTERACTIVE) {
+    client->setQuiet(true);
+  }
+
+  V8ShellFeature* shell =
+      dynamic_cast<V8ShellFeature*>(server()->feature("V8ShellFeature"));
+
+  switch (_runMode) {
+    case RunMode::INTERACTIVE:
+      shell->runShell(_positionals);
+  }
 }
 
-#if 0
-
-  int ret = EXIT_SUCCESS;
-
-  *_result = ret;
-
-  client->createEndpointServer();
-
-  if (client->endpointServer() == nullptr) {
-    LOG(FATAL) << "invalid value for --server.endpoint ('" << client->endpoint()
-               << "')";
-    FATAL_ERROR_EXIT();
-  }
-
-  _connection = GeneralClientConnection::factory(
-      client->endpointServer(), client->requestTimeout(),
-      client->connectionTimeout(), ClientFeature::DEFAULT_RETRIES,
-      client->sslProtocol());
-
-  if (_connection == nullptr) {
-    LOG(FATAL) << "out of memory";
-    FATAL_ERROR_EXIT();
-  }
-
-  _httpClient =
-      new SimpleHttpClient(_connection, client->requestTimeout(), false);
-
-  std::string dbName = client->databaseName();
-
-  _httpClient->setLocationRewriter((void*)&dbName, &rewriteLocation);
-  _httpClient->setUserNamePassword("/", client->username(), client->password());
-
-  std::string const versionString = getArangoVersion(nullptr);
-
-  if (!_connection->isConnected()) {
-    LOG(ERR) << "Could not connect to endpoint '" << client->endpoint()
-             << "', database: '" << dbName << "', username: '"
-             << client->username() << "'";
-    LOG(FATAL) << "Error message: '" << _httpClient->getErrorMessage() << "'";
-
-    FATAL_ERROR_EXIT();
-  }
-
-  // successfully connected
-  std::cout << "Server version: " << versionString << std::endl;
-
-  // validate server version
-  int major = 0;
-  int minor = 0;
-
-  if (sscanf(versionString.c_str(), "%d.%d", &major, &minor) != 2) {
-    LOG(FATAL) << "invalid server version '" << versionString << "'";
-    FATAL_ERROR_EXIT();
-  }
-
-  if (major != 3) {
-    // we can connect to 3.x
-    LOG(ERR) << "Error: got incompatible server version '" << versionString
-             << "'";
-
-    if (!_force) {
-      FATAL_ERROR_EXIT();
-    }
-  }
-
-  if (major >= 2) {
-    // Version 1.4 did not yet have a cluster mode
-    _clusterMode = getArangoIsCluster(nullptr);
-
-    if (_clusterMode) {
-      if (_tickStart != 0 || _tickEnd != 0) {
-        LOG(ERR) << "Error: cannot use tick-start or tick-end on a cluster";
-        FATAL_ERROR_EXIT();
-      }
-    }
-  }
-
-  if (!_connection->isConnected()) {
-    LOG(ERR) << "Lost connection to endpoint '" << client->endpoint()
-             << "', database: '" << dbName << "', username: '"
-             << client->username() << "'";
-    LOG(FATAL) << "Error message: '" << _httpClient->getErrorMessage() << "'";
-    FATAL_ERROR_EXIT();
-  }
-
-  if (_progress) {
-    std::cout << "Connected to ArangoDB '" << client->endpoint()
-              << "', database: '" << dbName << "', username: '"
-              << client->username() << "'" << std::endl;
-
-    std::cout << "Writing sh to output directory '" << _outputDirectory << "'"
-              << std::endl;
-  }
-
-  memset(&_stats, 0, sizeof(_stats));
-
-  std::string errorMsg = "";
-
-  int res;
-
-  try {
-    if (!_clusterMode) {
-      res = startBatch("", errorMsg);
-
-      if (res != TRI_ERROR_NO_ERROR && _force) {
-        res = TRI_ERROR_NO_ERROR;
-      }
-
-      if (res == TRI_ERROR_NO_ERROR) {
-        res = runSh(dbName, errorMsg);
-      }
-
-      if (_batchId > 0) {
-        endBatch("");
-      }
-    } else {
-      res = runClusterSh(errorMsg);
-    }
-  } catch (std::exception const& ex) {
-    LOG(ERR) << "caught exception " << ex.what();
-    res = TRI_ERROR_INTERNAL;
-  } catch (...) {
-    LOG(ERR) << "Error: caught unknown exception";
-    res = TRI_ERROR_INTERNAL;
-  }
-
-  if (res != TRI_ERROR_NO_ERROR) {
-    if (!errorMsg.empty()) {
-      LOG(ERR) << errorMsg;
-    } else {
-      LOG(ERR) << "An error occurred";
-    }
-    ret = EXIT_FAILURE;
-  }
-
-  if (_progress) {
-    if (_shData) {
-      std::cout << "Processed " << _stats._totalCollections
-                << " collection(s), "
-                << "wrote " << _stats._totalWritten
-                << " byte(s) into datafiles, "
-                << "sent " << _stats._totalBatches << " batch(es)" << std::endl;
-    } else {
-      std::cout << "Processed " << _stats._totalCollections << " collection(s)"
-                << std::endl;
-    }
-  }
-
-  *_result = ret;
-}
-
-#endif
-
-void ArangoshFeature::stop() {
-#if 0
-  if (_httpClient != nullptr) {
-    delete _httpClient;
-  }
-#endif
-}
+void ArangoshFeature::stop() {}

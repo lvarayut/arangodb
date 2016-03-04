@@ -49,7 +49,7 @@ ClientFeature::ClientFeature(application_features::ApplicationServer* server,
       _section("server"),
       _retries(DEFAULT_RETRIES),
       _warn(false) {
-  setOptional(false);
+  setOptional(true);
   requiresElevatedPrivileges(false);
 }
 
@@ -131,6 +131,27 @@ void ClientFeature::validateOptions(std::shared_ptr<ProgramOptions> options) {
     usleep(10 * 1000);
     _password = ConsoleFeature::readPassword("Please specify a password: ");
   }
+}
+
+std::unique_ptr<GeneralClientConnection> ClientFeature::createConnection() {
+  return createConnection(_endpoint);
+}
+
+std::unique_ptr<GeneralClientConnection> ClientFeature::createConnection(
+    std::string const& definition) {
+  std::unique_ptr<Endpoint> endpoint(Endpoint::clientFactory(definition));
+
+  if (endpoint.get() == nullptr) {
+    LOG(ERR) << "invalid value for --server.endpoint ('" << definition << "')";
+    THROW_ARANGO_EXCEPTION(TRI_ERROR_BAD_PARAMETER);
+  }
+
+  std::unique_ptr<GeneralClientConnection> connection(
+      GeneralClientConnection::factory(endpoint, _requestTimeout,
+                                       _connectionTimeout, _retries,
+                                       _sslProtocol));
+
+  return connection;
 }
 
 std::unique_ptr<SimpleHttpClient> ClientFeature::createHttpClient() {

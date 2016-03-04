@@ -43,6 +43,7 @@ class ApplicationFeature {
 
   virtual ~ApplicationFeature();
 
+ public:
   // return the feature's name
   std::string name() const { return _name; }
 
@@ -150,7 +151,7 @@ class ApplicationFeature {
 
   // abort program execution because of invalid parameters
   // TODO: add default implementation
-  void abortInvalidParameters() {std::abort();}
+  void abortInvalidParameters() { std::abort(); }
 
  private:
   // pointer to application server

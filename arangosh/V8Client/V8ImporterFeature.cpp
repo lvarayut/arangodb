@@ -1,3 +1,12 @@
+  // import functions
+  TRI_AddGlobalVariableVocbase(
+      _isolate, context, TRI_V8_ASCII_STRING2(_isolate, "SYS_IMPORT_CSV_FILE"),
+      v8::FunctionTemplate::New(_isolate, JS_ImportCsvFile)->GetFunction());
+
+  TRI_AddGlobalVariableVocbase(
+      _isolate, context, TRI_V8_ASCII_STRING2(_isolate, "SYS_IMPORT_JSON_FILE"),
+      v8::FunctionTemplate::New(_isolate, JS_ImportJsonFile)->GetFunction());
+
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief imports a CSV file
 ///

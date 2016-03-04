@@ -86,6 +86,8 @@ std::string ArangoClientHelper::getHttpErrorMessage(SimpleHttpResult* result,
          result->getHttpReturnMessage() + ")" + details;
 }
 
+#warning is this SimpleHttpClient::getServerVersion
+
 // fetch the version from the server
 std::string ArangoClientHelper::getArangoVersion(int* err) {
   std::unique_ptr<SimpleHttpResult> response(_httpClient->request(

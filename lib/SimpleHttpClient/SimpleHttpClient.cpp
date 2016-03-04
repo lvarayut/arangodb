@@ -78,7 +78,7 @@ SimpleHttpClient::SimpleHttpClient(GeneralClientConnection* connection,
 SimpleHttpClient::SimpleHttpClient(
     std::unique_ptr<GeneralClientConnection>& connection, double requestTimeout,
     bool warn)
-  : SimpleHttpClient(connection.get(), requestTimeout, warn) {
+    : SimpleHttpClient(connection.get(), requestTimeout, warn) {
   _deleteConnectionOnDestruction = true;
   connection.release();
 }
@@ -99,6 +99,12 @@ SimpleHttpClient::~SimpleHttpClient() {
 // -----------------------------------------------------------------------------
 // public methods
 // -----------------------------------------------------------------------------
+
+void SimpleHttpClient::setInterrupted(bool value) {
+  if (_connection != nullptr) {
+    _connection->setInterrupted(value);
+  }
+}
 
 bool SimpleHttpClient::isConnected() { return _connection->isConnected(); }
 

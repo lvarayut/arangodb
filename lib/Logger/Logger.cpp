@@ -792,6 +792,7 @@ LogTopic Logger::QUERIES("queries", LogLevel::INFO);
 LogTopic Logger::REPLICATION("replication", LogLevel::INFO);
 LogTopic Logger::REQUESTS("requests", LogLevel::FATAL);  // suppress by default
 LogTopic Logger::THREADS("threads", LogLevel::WARN);
+LogTopic Logger::V8("v8", LogLevel::WARN);
 
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief current log level

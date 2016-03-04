@@ -29,13 +29,37 @@
 using namespace arangodb::application_features;
 using namespace arangodb::options;
 
+ApplicationServer* ApplicationServer::server = nullptr;
+
 ApplicationServer::ApplicationServer(std::shared_ptr<ProgramOptions> options)
-    : _options(options), _stopping(false), _privilegesDropped(false) {}
+    : _options(options), _stopping(false), _privilegesDropped(false) {
+  if (ApplicationServer::server != nullptr) {
+    LOG(ERR) << "ApplicationServer initialized twice";
+  }
+
+  ApplicationServer::server = this;
+}
 
 ApplicationServer::~ApplicationServer() {
   for (auto& it : _features) {
     delete it.second;
   }
+
+  ApplicationServer::server = nullptr;
+}
+
+ApplicationFeature* ApplicationServer::lookupFeature(std::string const& name) {
+  if (ApplicationServer::server == nullptr) {
+    return nullptr;
+  }
+
+  try {
+    return ApplicationServer::server->feature(name);
+  }
+  catch (...) {
+  }
+
+  return nullptr;
 }
 
 // adds a feature to the application server. the application server

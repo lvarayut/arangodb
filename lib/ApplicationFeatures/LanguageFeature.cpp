@@ -22,27 +22,29 @@
 
 #include "ApplicationFeatures/LanguageFeature.h"
 
+#include "Basics/Utf8Helper.h"
+#include "Logger/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
 
 using namespace arangodb;
+using namespace arangodb::basics;
 using namespace arangodb::options;
 
 LanguageFeature::LanguageFeature(
-    application_features::ApplicationServer* server, std::string const& feature)
+    application_features::ApplicationServer* server)
     : ApplicationFeature(server, "LanguageFeature") {
-  startsAfter(feature);
   setOptional(false);
   requiresElevatedPrivileges(false);
 }
 
-void LanguageFeature::collectOptions(std::shared_ptr<options::ProgramOptions>) {
+void LanguageFeature::collectOptions(
+    std::shared_ptr<options::ProgramOptions> options) {
   options->addHiddenOption("--default-language", "ISO-639 language code",
                            new StringParameter(&_language));
 }
 
-void LanguageFeature::prepare(
-    std::shared_ptr<options::ProgramOptions> options) {
+void LanguageFeature::prepare() {
   if (!Utf8Helper::DefaultUtf8Helper.setCollatorLanguage(_language)) {
     std::string msg =
         "cannot initialize ICU; please make sure ICU*dat is available; "
@@ -52,7 +54,7 @@ void LanguageFeature::prepare(
     }
     msg += "' should point the directory containing the ICU*dat file.";
 
-    LOG(FATA) << msg;
+    LOG(FATAL) << msg;
     FATAL_ERROR_EXIT();
   }
 }

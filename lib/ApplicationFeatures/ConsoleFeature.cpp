@@ -22,7 +22,11 @@
 
 #include "ApplicationFeatures/ConsoleFeature.h"
 
+#include "ApplicationFeatures/ClientFeature.h"
+#include "Basics/messages.h"
+#include "Basics/shell-colors.h"
 #include "Basics/terminal-utils.h"
+#include "Logger/Logger.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "ProgramOptions2/Section.h"
 
@@ -31,8 +35,9 @@ using namespace arangodb::options;
 
 ConsoleFeature::ConsoleFeature(application_features::ApplicationServer* server)
     : ApplicationFeature(server, "ConsoleFeature"),
-#if WIN32
+#ifdef _WIN32
       _codePage(-1),
+      _cygwinShell(false),
 #endif
       _quiet(false),
       _colors(true),
@@ -42,7 +47,10 @@ ConsoleFeature::ConsoleFeature(application_features::ApplicationServer* server)
       _pager(false),
       _pagerCommand("less -X -R -F -L"),
       _prompt("%E@%d> "),
-      _cygwinShell(false) {
+      _promptError(false),
+      _supportsColors(true),
+      _toPager(stdout),
+      _toAuditFile(nullptr) {
   setOptional(false);
   requiresElevatedPrivileges(false);
 }
@@ -70,13 +78,13 @@ void ConsoleFeature::collectOptions(std::shared_ptr<ProgramOptions> options) {
   options->addOption("--console.pager", "enable paging",
                      new BooleanParameter(&_pager));
 
-  options->addOption("--console.pager-command", "pager command",
-                     new StringParameter(&_pagerCommand));
+  options->addHiddenOption("--console.pager-command", "pager command",
+                           new StringParameter(&_pagerCommand));
 
   options->addOption("--console.prompt", "prompt used in REPL",
                      new StringParameter(&_prompt));
 
-#if WIN32
+#if _WIN32
   options->addOption("--console.code-page", "Windows code page to use",
                      new Int16Parameter(&_codePage));
 #endif
@@ -87,8 +95,12 @@ void ConsoleFeature::prepare() {
   if (getenv("SHELL") != nullptr) {
     _cygwinShell = true;
   }
-#endif  
+#endif
 }
+
+void ConsoleFeature::start() { openLog(); }
+
+void ConsoleFeature::stop() { closeLog(); }
 
 // prints a string to stdout, without a newline (Non-Windows only) on
 // Windows, we'll print the line and a newline.  No, we cannot use
@@ -198,13 +210,16 @@ static void _printLine(std::string const& s) {
 }
 #endif
 
+#warning do we need forceNewLine
+
 void ConsoleFeature::printLine(std::string const& s, bool forceNewLine) {
-#if _WIN32
+#ifdef _WIN32
   if (!cygwinShell) {
     // no, we cannot use std::cout as this doesn't support UTF-8 on Windows
     // fprintf(stdout, "%s\r\n", s.c_str());
     TRI_vector_string_t subStrings = TRI_SplitString(s.c_str(), '\n');
     bool hasNewLines = (s.find("\n") != std::string::npos) | forceNewLine;
+
     if (hasNewLines) {
       for (size_t i = 0; i < subStrings._length; i++) {
         _printLine(subStrings._buffer[i]);
@@ -216,7 +231,18 @@ void ConsoleFeature::printLine(std::string const& s, bool forceNewLine) {
     TRI_DestroyVectorString(&subStrings);
   } else
 #endif
+  {
     fprintf(stdout, "%s\n", s.c_str());
+  }
+}
+
+void ConsoleFeature::printErrorLine(std::string const& s) {
+#ifdef _WIN32
+  // no, we can use std::cerr as this doesn't support UTF-8 on Windows
+  printLine(s);
+#else
+  fprintf(stderr, "%s\n", s.c_str());
+#endif
 }
 
 std::string ConsoleFeature::readPassword(std::string const& message) {
@@ -237,22 +263,114 @@ std::string ConsoleFeature::readPassword(std::string const& message) {
   return password;
 }
 
-#warning TODO
-#if 0
+void ConsoleFeature::printWelcomeInfo() {
+  if (!_quiet) {
+    if (_pager) {
+      std::ostringstream s;
 
-////////////////////////////////////////////////////////////////////////////////
-/// @brief dynamically replace %d, %e, %u in the prompt
-////////////////////////////////////////////////////////////////////////////////
+      s << "Using pager '" << _pagerCommand
+        << "' for output buffering.";
 
-static std::string BuildPrompt() {
+      printLine(s.str());
+    }
+
+    if (_prettyPrint) {
+      printLine("Pretty printing values.");
+    }
+  }
+}
+
+void ConsoleFeature::printByeBye() {
+  if (!_quiet) {
+    printLine("<ctrl-D>");
+    printLine(TRI_BYE_MESSAGE);
+  }
+}
+
+static std::string StripBinary(std::string const& value) {
   std::string result;
 
-  char const* p = Prompt.c_str();
+  bool inBinary = false;
+
+  for (char c : value) {
+    if (inBinary) {
+      if (c == 'm') {
+        inBinary = false;
+      }
+    } else {
+      if (c == '\x1b') {
+        inBinary = true;
+      } else {
+        result.push_back(c);
+      }
+    }
+  }
+
+  return result;
+}
+
+void ConsoleFeature::print(std::string const& message) {
+  if (_toPager == stdout) {
+#ifdef _WIN32
+    // at moment the formating is ignored in windows
+    printLine(message);
+#else
+    fprintf(_toPager, "%s", message.c_str());
+#endif
+
+  } else {
+    std::string sanitized = StripBinary(message.c_str());
+    fprintf(_toPager, "%s", sanitized.c_str());
+  }
+
+  log(message);
+}
+
+void ConsoleFeature::openLog() {
+  if (!_auditFile.empty()) {
+    _toAuditFile = fopen(_auditFile.c_str(), "w");
+
+    std::ostringstream s;
+
+    if (_toAuditFile == nullptr) {
+      s << "Cannot open file '" << _auditFile << "' for logging.";
+      printErrorLine(s.str());
+    } else {
+      s << "Logging input and output to '" << _auditFile << "'.";
+      printLine(s.str());
+    }
+  }
+}
+
+void ConsoleFeature::closeLog() {
+  if (_toAuditFile != nullptr) {
+    fclose(_toAuditFile);
+    _toAuditFile = nullptr;
+  }
+}
+
+void ConsoleFeature::log(std::string const& message) {
+  if (_toAuditFile != nullptr) {
+    std::string sanitized = StripBinary(message);
+
+    if (!sanitized.empty()) {
+      // do not print terminal escape sequences into log
+      fprintf(_toAuditFile, "%s", sanitized.c_str());
+    }
+  }
+}
+
+void ConsoleFeature::flushLog() {
+  if (_toAuditFile) {
+    fflush(_toAuditFile);
+  }
+}
+
+ConsoleFeature::Prompt ConsoleFeature::buildPrompt(ClientFeature* client) {
+  std::string result;
   bool esc = false;
 
-  while (true) {
-    char const c = *p;
-
+  for (char c : _prompt) {
     if (c == '\0') {
       break;
     }
@@ -261,14 +379,18 @@ static std::string BuildPrompt() {
       if (c == '%') {
         result.push_back(c);
       } else if (c == 'd') {
-        result.append(BaseClient.databaseName());
+        if (client != nullptr) {
+          result.append(client->databaseName());
+        } else {
+          result.append("[database]");
+        }
       } else if (c == 'e' || c == 'E') {
         std::string ep;
 
-        if (ClientConnection == nullptr) {
+        if (client == nullptr) {
           ep = "none";
         } else {
-          ep = BaseClient.endpointString();
+          ep = client->endpoint();
         }
 
         if (c == 'E') {
@@ -284,7 +406,11 @@ static std::string BuildPrompt() {
 
         result.append(ep);
       } else if (c == 'u') {
-        result.append(BaseClient.username());
+        if (client == nullptr) {
+          result.append("[user]");
+        } else {
+          result.append(client->username());
+        }
       }
 
       esc = false;
@@ -295,14 +421,51 @@ static std::string BuildPrompt() {
         result.push_back(c);
       }
     }
-
-    ++p;
   }
 
-  return result;
+  std::string colored;
+
+  if (_supportsColors && _colors) {
+    if (_promptError) {
+      colored = TRI_SHELL_COLOR_BOLD_RED + result + TRI_SHELL_COLOR_RESET;
+    } else {
+      colored = TRI_SHELL_COLOR_BOLD_GREEN + result + TRI_SHELL_COLOR_RESET;
+    }
+  } else {
+    colored = result;
+  }
+
+  return {result, colored};
 }
 
+void ConsoleFeature::startPager() {
+#ifndef _WIN32
+  if (!_pager || _pagerCommand.empty() || _pagerCommand == "stdout" ||
+      _pagerCommand == "-") {
+    _toPager = stdout;
+  } else {
+    _toPager = popen(_pagerCommand.c_str(), "w");
 
+    if (_toPager == nullptr) {
+      LOG(ERR) << "popen() for pager failed! Using stdout instead!";
+      _toPager = stdout;
+      _pager = false;
+    }
+  }
+#endif
+}
+
+void ConsoleFeature::stopPager() {
+#ifndef _WIN32
+  if (_toPager != stdout) {
+    pclose(_toPager);
+    _toPager = stdout;
+  }
+#endif
+}
+
+#warning TODO
+#if 0
 
 static bool PrintHelo(bool useServer) {
   bool promptError = false;

@@ -68,6 +68,8 @@ class SimpleHttpClient {
   ~SimpleHttpClient();
 
  public:
+  void setInterrupted(bool value);
+  
   //////////////////////////////////////////////////////////////////////////////
   /// @brief invalidates the connection used by the client
   /// this may be called from other objects that are responsible for managing

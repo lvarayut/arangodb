@@ -25,12 +25,16 @@
 
 #include "ApplicationFeatures/ClientFeature.h"
 #include "ApplicationFeatures/ConfigFeature.h"
+#include "ApplicationFeatures/ConsoleFeature.h"
+#include "ApplicationFeatures/LanguageFeature.h"
 #include "ApplicationFeatures/LoggerFeature.h"
 #include "ApplicationFeatures/ShutdownFeature.h"
+#include "ApplicationFeatures/V8PlatformFeature.h"
 #include "Basics/files.h"
 #include "ProgramOptions2/ProgramOptions.h"
 #include "Rest/InitializeRest.h"
 #include "Shell/ArangoshFeature.h"
+#include "Shell/V8ShellFeature.h"
 
 using namespace arangodb;
 using namespace arangodb::application_features;
@@ -52,9 +56,13 @@ int main(int argc, char* argv[]) {
 
   int ret;
 
-  server.addFeature(new LoggerFeature(&server));
   server.addFeature(new ConfigFeature(&server, name));
+  server.addFeature(new LoggerFeature(&server));
+  server.addFeature(new LanguageFeature(&server));
   server.addFeature(new ClientFeature(&server));
+  server.addFeature(new ConsoleFeature(&server));
+  server.addFeature(new V8PlatformFeature(&server));
+  server.addFeature(new V8ShellFeature(&server, name));
   server.addFeature(new ArangoshFeature(&server, &ret));
   server.addFeature(new ShutdownFeature(&server, "ArangoshFeature"));
 

@@ -27,6 +27,7 @@
 
 namespace arangodb {
 namespace httpclient {
+class GeneralClientConnection;
 class SimpleHttpClient;
 }
 namespace rest {
@@ -54,13 +55,19 @@ class ClientFeature final : public application_features::ApplicationFeature {
   std::string const& databaseName() const { return _databaseName; }
   bool authentication() const { return _authentication; }
   std::string const& endpoint() const { return _endpoint; }
+  void setEndpoint(std::string const& value) { _endpoint = value; }
   std::string const& username() const { return _username; }
+  void setUsername(std::string const& value) { _username = value; }
   std::string const& password() const { return _password; }
+  void setPassword(std::string const& value) { _password = value; }
   double connectionTimeout() const { return _connectionTimeout; }
   double requestTimeout() const { return _requestTimeout; }
   uint64_t sslProtocol() const { return _sslProtocol; }
 
  public:
+  std::unique_ptr<httpclient::GeneralClientConnection> createConnection();
+  std::unique_ptr<httpclient::GeneralClientConnection> createConnection(
+      std::string const& definition);
   std::unique_ptr<httpclient::SimpleHttpClient> createHttpClient();
   std::unique_ptr<httpclient::SimpleHttpClient> createHttpClient(
       std::string const& definition);
@@ -69,13 +76,9 @@ class ClientFeature final : public application_features::ApplicationFeature {
     _databaseName = databaseName;
   }
 
-  void setRetries(size_t retries) {
-    _retries = retries;
-  }
+  void setRetries(size_t retries) { _retries = retries; }
 
-  void setWarn(bool warn) {
-    _warn = warn;
-  }
+  void setWarn(bool warn) { _warn = warn; }
 
  private:
   std::string _databaseName;

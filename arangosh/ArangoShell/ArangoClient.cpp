@@ -194,19 +194,6 @@ void ArangoClient::parse(ProgramOptions& options,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief prints a string and a newline to stderr
-////////////////////////////////////////////////////////////////////////////////
-
-void ArangoClient::printErrLine(std::string const& s) {
-#ifdef _WIN32
-  // no, we can use std::cerr as this doesn't support UTF-8 on Windows
-  printLine(s);
-#else
-  fprintf(stderr, "%s\n", s.c_str());
-#endif
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// @brief prints a string and a newline to stdout
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -224,79 +211,10 @@ void ArangoClient::printContinuous(std::string const& s) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// @brief starts pager
-////////////////////////////////////////////////////////////////////////////////
-
-void ArangoClient::startPager() {
-#warning TODO
-#if 0
-#ifndef _WIN32
-  if (!_consoleFeature._pager || _consoleFeature._pagerCommand == "" ||
-      _consoleFeature._pagerCommand == "stdout" ||
-      _consoleFeature._pagerCommand == "-") {
-    _pager = stdout;
-    return;
-  }
-
-  _pager = popen(_consoleFeature._pagerCommand.c_str(), "w");
-
-  if (_pager == nullptr) {
-    printf("popen() failed! Using stdout instead!\n");
-    _pager = stdout;
-    _consoleFeature._pager = false;
-  }
-#endif
-#endif
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief stops pager
-////////////////////////////////////////////////////////////////////////////////
-
-void ArangoClient::stopPager() {
-#warning TODO
-#if 0
-#ifndef _WIN32
-  if (_pager != stdout) {
-    pclose(_pager);
-    _pager = stdout;
-  }
-#endif
-#endif
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief strips binary data from string
-/// this is done before sending the string to a pager or writing it to the log
-////////////////////////////////////////////////////////////////////////////////
-
-static std::string StripBinary(char const* value) {
-  std::string result;
-
-  char const* p = value;
-  bool inBinary = false;
-
-  while (*p) {
-    if (inBinary) {
-      if (*p == 'm') {
-        inBinary = false;
-      }
-    } else {
-      if (*p == '\x1b') {
-        inBinary = true;
-      } else {
-        result.push_back(*p);
-      }
-    }
-    ++p;
-  }
-
-  return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 /// @brief prints to pager
 ////////////////////////////////////////////////////////////////////////////////
+
+-> ConsoleFeature
 
 void ArangoClient::internalPrint(std::string const& str) {
 #warning TODO
@@ -383,63 +301,6 @@ void ArangoClient::printWelcomeInfo() {
 /// @brief prints bye-bye
 ////////////////////////////////////////////////////////////////////////////////
 
-void ArangoClient::printByeBye() {
-  if (!_consoleFeature._quiet) {
-    printLine("<ctrl-D>");
-    printLine(TRI_BYE_MESSAGE);
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief logs output, without prompt
-////////////////////////////////////////////////////////////////////////////////
-
-void ArangoClient::log(char const* format, char const* str) {
-#warning TODO
-#if 0
-  if (_auditFile) {
-    std::string sanitized = StripBinary(str);
-
-    if (!sanitized.empty()) {
-      // do not print terminal escape sequences into log
-      fprintf(_auditFile, format, sanitized.c_str());
-    }
-  }
-#endif
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief logs output, with prompt
-////////////////////////////////////////////////////////////////////////////////
-
-void ArangoClient::log(std::string const& format, std::string const& prompt,
-                       std::string const& str) {
-#warning TODO
-#if 0
-  if (_auditFile) {
-    std::string sanitized = StripBinary(str.c_str());
-
-    if (!sanitized.empty()) {
-      // do not print terminal escape sequences into log
-      fprintf(_auditFile, format.c_str(), prompt.c_str(), sanitized.c_str());
-    }
-  }
-#endif
-}
-
-////////////////////////////////////////////////////////////////////////////////
-/// @brief flushes log output
-////////////////////////////////////////////////////////////////////////////////
-
-void ArangoClient::flushLog() {
-#warning TODO
-#if 0
-  if (_auditFile) {
-    fflush(_auditFile);
-  }
-#endif
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 /// @brief creates a new endpoint
 ////////////////////////////////////////////////////////////////////////////////
@@ -520,6 +381,7 @@ std::string const& ArangoClient::outputPager() const {
 /// @brief gets use pager
 ////////////////////////////////////////////////////////////////////////////////
 
+-> ConsoleFeature
 bool ArangoClient::usePager() const { return _consoleFeature._pager; }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -20,23 +20,6 @@
 /// @author Dr. Frank Celler
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_LANGUAGE_FEATURE_H
-#define APPLICATION_FEATURES_LANGUAGE_FEATURE_H 1
+#ifndef SHELL_V8CONNECTION_FEATURE_H
+#define SHELL_V8CONNECTION_FEATURE_H 1
 
-#include "ApplicationFeatures/ApplicationFeature.h"
-
-namespace arangodb {
-class LanguageFeature final : public application_features::ApplicationFeature {
- public:
-  explicit LanguageFeature(application_features::ApplicationServer* server);
-
- public:
-  void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
-  void prepare() override;
-
- private:
-  std::string _language;
-};
-}
-
-#endif

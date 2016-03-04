@@ -38,6 +38,10 @@ class ApplicationServer {
   ApplicationServer& operator=(ApplicationServer const&) = delete;
 
  public:
+  static ApplicationServer* server;
+  static ApplicationFeature* lookupFeature(std::string const&);
+
+ public:
   explicit ApplicationServer(std::shared_ptr<options::ProgramOptions>);
 
   ~ApplicationServer();

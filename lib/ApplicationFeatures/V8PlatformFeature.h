@@ -20,45 +20,30 @@
 /// @author Dr. Frank Celler
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef APPLICATION_FEATURES_ARANGOSH_FEATURE_H
-#define APPLICATION_FEATURES_ARANGOSH_FEATURE_H 1
+#ifndef APPLICATION_FEATURES_V8PLATFORM_FEATURE_H
+#define APPLICATION_FEATURES_V8PLATFORM_FEATURE_H 1
 
 #include "ApplicationFeatures/ApplicationFeature.h"
 
+#include <v8.h>
+#include <libplatform/libplatform.h>
+
 namespace arangodb {
-class ArangoshFeature final : public application_features::ApplicationFeature {
+class V8PlatformFeature final : public application_features::ApplicationFeature {
  public:
-  ArangoshFeature(application_features::ApplicationServer* server, int* result);
+  explicit V8PlatformFeature(application_features::ApplicationServer* server);
 
  public:
   void collectOptions(std::shared_ptr<options::ProgramOptions>) override;
-  void validateOptions(
-      std::shared_ptr<options::ProgramOptions> options) override;
-  void prepare() override;
   void start() override;
   void stop() override;
 
  private:
-  std::vector<std::string> _jslint;
-  std::vector<std::string> _executeScripts;
-  std::vector<std::string> _executeStrings;
-  std::vector<std::string> _checkSyntaxFiles;
-  std::vector<std::string> _unitTests;
-
- public:
-  enum class RunMode {
-    INTERACTIVE,
-    EXECUTE_SCRIPT,
-    EXECUTE_STRING,
-    CHECK_SYNTAX,
-    UNIT_TESTS,
-    JSLINT
-  };
+  std::string _v8options;
 
  private:
-  int* _result;
-  RunMode _runMode;
-  std::vector<std::string> _positionals;
+  std::unique_ptr<v8::Platform> _platform;
+  std::unique_ptr<v8::ArrayBuffer::Allocator> _allocator;
 };
 }
 
